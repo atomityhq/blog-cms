@@ -1,0 +1,63 @@
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+   All colors, fonts, spacing, and radii are defined here.
+   Components reference these tokens — never raw hex values.
+   Palette follows the Atomity design system.
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand ── */
+  --atomity-green: #97ddb1;
+  --atomity-green-light: #b0ecc6;
+  --atomity-green-tint: #ddf5e6;
+  --atomity-green-dark: #7ecfa0;
+  --atomity-orange: #ff6b00;
+
+  /* ── Neutrals ── */
+  --atomity-black: #030303;
+  --atomity-gray-900: #0c0c0c;
+  --atomity-gray-800: #1c1c1e;
+  --atomity-gray-600: rgba(3, 3, 3, 0.7);
+  --atomity-gray-400: rgba(3, 3, 3, 0.4);
+  --atomity-gray-200: rgba(3, 3, 3, 0.12);
+  --atomity-gray-100: #e8e5d9;
+  --atomity-gray-50: #f6f4ec;
+  --atomity-white: #fbfaf7;
+
+  /* ── Status ── */
+  --status-success: #2f9e5f;
+  --status-warning: #c27c0e;
+  --status-danger: #d1453b;
+
+  /* ── Semantic surfaces / text / borders ── */
+  --surface-page: var(--atomity-gray-50);
+  --surface-card: var(--atomity-white);
+  --surface-sidebar: var(--atomity-gray-900);
+  --text-primary: var(--atomity-black);
+  --text-secondary: rgba(3, 3, 3, 0.62);
+  --text-muted: rgba(3, 3, 3, 0.5);
+  --text-on-dark: var(--atomity-gray-50);
+  --border-light: rgba(3, 3, 3, 0.12);
+  --border-strong: rgba(3, 3, 3, 0.22);
+  --focus-ring: 0 0 0 3px var(--atomity-green-light);
+
+  /* ── Radius ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  /* ── Typography (font variables come from next/font in app/layout.tsx) ── */
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-code: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  /* ── Layout ── */
+  --container-max: 1280px;
+  --container-padding: 20px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --container-padding: 32px;
+  }
+}
