@@ -1,0 +1,16 @@
+/**
+ * Base URL of the Spring Boot backend. Server-only: the browser never calls the
+ * backend directly — it goes through this app's route handlers, which keeps the
+ * backend off the public internet and the session token in an httpOnly cookie.
+ */
+export function backendBaseUrl(): string {
+  const url = process.env.BACKEND_API_URL;
+  if (!url) {
+    throw new Error("BACKEND_API_URL is not set. Add it to .env.local - see .env.example.");
+  }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    throw new Error(`BACKEND_API_URL must start with "http://" or "https://" (got "${url}").`);
+  }
+  // Callers append their own leading "/" — strip a trailing one to avoid "//".
+  return url.replace(/\/+$/, "");
+}

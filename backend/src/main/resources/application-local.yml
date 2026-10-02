@@ -1,0 +1,10 @@
+# Local development only — matches the postgres service in the root docker-compose.yml.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/blog_crm
+    username: blog_crm
+    password: blog_crm
+
+logging:
+  pattern:
+    console: '%d{HH:mm:ss.SSS} %-5level [%X{correlation_id}] %logger{36} - %msg%n'
