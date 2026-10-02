@@ -13,7 +13,9 @@ RUN ./gradlew bootJar --no-daemon --console=plain -x test
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-RUN addgroup -S blogcrm && adduser -S blogcrm -G blogcrm
+RUN addgroup -S blogcrm && adduser -S blogcrm -G blogcrm \
+    # Upload directory owned by the app user; a named volume mounted here inherits it.
+    && mkdir -p /data/media && chown blogcrm:blogcrm /data/media
 
 COPY --from=builder /workspace/build/libs/*.jar app.jar
 
