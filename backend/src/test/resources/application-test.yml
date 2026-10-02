@@ -1,0 +1,10 @@
+blogcrm:
+  admin:
+    email: admin@test.local
+    # bcrypt("test-password"), cost 4 to keep tests fast
+    password-hash: "$2a$04$WKH3rfDFLX/OCGamG3yfoO2u.JR1NDKBb9khVFvP4jjFnqw2z2nE2"
+  jwt:
+    secret: test-secret-test-secret-test-secret-0123456789
+    ttl: 1h
+  media:
+    storage-path: ./build/test-media

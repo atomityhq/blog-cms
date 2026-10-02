@@ -5,6 +5,16 @@ spring:
     username: blog_crm
     password: blog_crm
 
+blogcrm:
+  # Local development only: sign in as admin@example.com / admin.
+  admin:
+    email: admin@example.com
+    password-hash: "$2a$10$wBISilJqYrK8S7ddSh4zhuWUnPjn24l5hToR4l4lIkKH/WG.fsKI6"
+  jwt:
+    secret: local-development-secret-not-for-production-use
+  media:
+    storage-path: ./data/media
+
 logging:
   pattern:
     console: '%d{HH:mm:ss.SSS} %-5level [%X{correlation_id}] %logger{36} - %msg%n'

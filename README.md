@@ -6,7 +6,8 @@ An open-source CRM for writing, managing and publishing blog posts.
 - **Backend** — Spring Boot 3.4, Java 21, Gradle
 - **Database** — PostgreSQL 16, schema managed by Flyway
 
-> **Status:** initial setup. The CRM features (posts, editor, authors, tags, media) are in progress.
+> **Status:** the backend API (posts, authors, tags, media, admin login) is in place.
+> The CRM screens are being built against it.
 
 ## Repository layout
 
@@ -36,6 +37,9 @@ make up            # or: docker compose up --build
 | Backend  | http://localhost:8080/health/readiness    |
 | Postgres | `localhost:5432` (credentials from `.env`) |
 
+With the defaults from `.env.example` you sign in as **admin@example.com / admin** — change
+`ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` and `JWT_SECRET` before exposing it anywhere.
+
 ## Local development
 
 Requires **Java 21**, **Node.js ≥ 20.9** and Docker (for Postgres and backend tests).
@@ -63,8 +67,21 @@ make install && make frontend             # Next.js on :3000
 | `SPRING_DATASOURCE_URL`      | backend  | JDBC URL, e.g. `jdbc:postgresql://host:5432/blog_crm` |
 | `SPRING_DATASOURCE_USERNAME` | backend  | Database user                                |
 | `SPRING_DATASOURCE_PASSWORD` | backend  | Database password                            |
+| `ADMIN_EMAIL`                | backend  | Email of the single admin account            |
+| `ADMIN_PASSWORD_HASH`        | backend  | bcrypt hash of the admin password (see below) |
+| `JWT_SECRET`                 | backend  | Session-token signing key, ≥ 32 characters   |
+| `JWT_TTL`                    | backend  | Session length (default `8h`)                |
+| `MEDIA_STORAGE_PATH`         | backend  | Directory for uploaded images (default `./data/media`) |
 | `SERVER_PORT`                | backend  | HTTP port (default `8080`)                   |
 | `BACKEND_API_URL`            | frontend | Backend base URL, used server-side only      |
+
+The admin password is never configured in plain text. Generate its hash with:
+
+```bash
+docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 "" 'your-password' | tr -d ':\n'
+```
+
+In `.env`, wrap the hash in single quotes — it contains `$`, which Compose would otherwise expand.
 
 See [`backend/.env.example`](backend/.env.example) and [`frontend/.env.example`](frontend/.env.example).
 

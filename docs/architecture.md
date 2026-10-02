@@ -25,6 +25,49 @@ Browser ──► frontend (Next.js) ──► backend (Spring Boot) ──► P
 - **Tests run against real Postgres** (Testcontainers), not H2, because the
   schema uses Postgres-specific types.
 
+## Authentication
+
+There is one admin account, configured through environment variables
+(`ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` — bcrypt). There are no users or roles.
+
+1. `POST /api/v1/auth/login` checks the credentials and returns an HS256 JWT
+   (`JWT_SECRET`, valid for `JWT_TTL`). Failed attempts are rate-limited per client
+   (5 per 15 minutes).
+2. The frontend keeps the token in an httpOnly cookie and forwards it as
+   `Authorization: Bearer` on every API call.
+3. Everything under `/api/v1` needs the token, except login and
+   `GET /api/v1/media/{id}/file` (images are public so published pages can embed them).
+
+## API
+
+All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /auth/login` | Exchange admin credentials for a token |
+| `GET /posts?status&q&tag&author&sort&direction&page&size` | Paginated list (`meta` holds page info) |
+| `GET /posts/counts` | Posts per status, for the list tabs |
+| `GET/PUT/DELETE /posts/{id}`, `POST /posts` | Read, update (send the loaded `version`), delete, create |
+| `POST /posts/{id}/publish` · `/unpublish` · `/archive` · `/duplicate` | Lifecycle actions |
+| `GET/POST /authors`, `PUT/DELETE /authors/{id}` | Authors |
+| `GET/POST /tags`, `PUT/DELETE /tags/{id}` | Tags |
+| `GET/POST /media` (multipart `file`), `PATCH/DELETE /media/{id}`, `GET /media/{id}/file` | Image library |
+
+### Business rules
+
+- New posts are drafts. Publishing requires a title and some content (words or an
+  image). `publishedAt` is set on first publication and kept across unpublish/republish.
+- Saves carry the `version` the editor loaded; a stale version gets `409 VERSION_CONFLICT`
+  instead of overwriting someone else's changes.
+- Slugs are unique per resource and derived from the title/name when left empty.
+- The post body is Tiptap JSON. On save the backend derives its plain text (for search),
+  word count, reading time, and the library images it embeds; links must be
+  `http(s)`, `mailto:`, `/` or `#`, and images `http(s)` or `/`.
+- Uploads are identified from their bytes (JPEG, PNG, WebP, GIF; ≤ 10 MB), never from the
+  client's file name or Content-Type. An image used as a cover, inline, or as an avatar
+  can't be deleted.
+- Deleting an author or tag removes it from posts; the posts stay.
+
 ## Backend layout
 
 Code is grouped by feature, then by layer:
@@ -32,8 +75,12 @@ Code is grouped by feature, then by layer:
 ```
 io.atomity.blogcrm
 ├── BlogCrmApplication
-├── shared/            ApiResponse, ApiError, GlobalExceptionHandler, CorrelationFilter
-└── <feature>/         controller/ dto/ entity/ repository/ service/
+├── shared/            ApiResponse, ApiError, ApiException, GlobalExceptionHandler,
+│                      CorrelationFilter, PageMeta, Slugs, Timestamps
+├── auth/              config/ (SecurityConfig, AuthProperties) controller/ dto/ service/
+├── post/              controller/ dto/ entity/ repository/ service/ (ContentAnalyzer)
+├── author/ tag/       controller/ dto/ entity/ repository/ service/
+└── media/             … plus storage/ (StorageService, local-disk implementation)
 ```
 
 Conventions: constructor injection, Java `record`s for DTOs, UUID primary

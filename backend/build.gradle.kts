@@ -22,12 +22,16 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.actuator)
     implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.security)
+    // Brings Nimbus JOSE: signs and verifies the admin session JWT (HS256).
+    implementation(libs.spring.boot.starter.oauth2.resource.server)
     implementation(libs.flyway.core)
     implementation(libs.flyway.postgres)
     runtimeOnly(libs.postgresql)
     runtimeOnly(libs.micrometer.prometheus)
 
     testImplementation(libs.spring.boot.test)
+    testImplementation(libs.spring.security.test)
     testImplementation(libs.spring.boot.testcontainers)
     testImplementation(libs.testcontainers.junit5)
     testImplementation(libs.testcontainers.postgresql)
