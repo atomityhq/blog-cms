@@ -44,13 +44,27 @@ keys, timestamps as UTC `Instant` / `TIMESTAMPTZ`, REST paths under
 
 ```
 src/
-├── app/          Routes only (pages, layouts, route handlers)
-├── modules/      One folder per feature: page.tsx, canvas.tsx (client), api.ts
-├── components/   Shared UI
-├── lib/          Server and shared helpers (backend client, utils)
-├── styles/       Design tokens (tokens.css) — components never use raw hex
-└── types/        Shared TypeScript types
+├── app/          Routes only (pages, layouts, route handlers) — each page renders a module canvas
+├── modules/      One folder per feature (posts, authors, tags, media, auth):
+│                 *Canvas.tsx screens + api.ts, the feature's only data access
+├── components/   Shared UI: ui/ (primitives) and shell/ (sidebar, top bar, navigation guard)
+├── hooks/        useAsync, useDebouncedValue, useUnsavedChangesWarning
+├── lib/          Helpers (slug, content, format) and mock/ (in-browser mock database)
+├── styles/       tokens.css (design tokens), base, component classes, editor typography
+├── types/        Domain types mirroring the backend's JSON (Post, Author, Tag, Media, Page)
+└── proxy.ts      Route gate: no session cookie → /login
 ```
+
+### Data access and the mock
+
+Screens never fetch directly; they call functions in `modules/<feature>/api.ts`,
+each documented with the backend endpoint it maps to. Until the backend exists,
+those functions read and write `lib/mock/db.ts` — a normalised copy of the planned
+tables kept in `localStorage`, seeded from `lib/mock/seed.ts`. Switching to the
+real API replaces the function bodies only; types and screens stay as they are.
+
+Post bodies are Tiptap (ProseMirror) **JSON**, never HTML. Images inside a body
+carry `attrs.mediaId`, so the backend can tell which library images a post uses.
 
 ## Health
 
