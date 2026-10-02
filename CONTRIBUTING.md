@@ -27,7 +27,7 @@ Read [docs/architecture.md](docs/architecture.md) first. In short:
 - Colors, radii and fonts come from `src/styles/tokens.css` — no raw hex values in components.
 - Server-only environment variables never get the `NEXT_PUBLIC_` prefix.
 - Next.js 16 differs from older versions; check `frontend/node_modules/next/dist/docs/` when in doubt.
-- After changing dependencies, make sure `npm ci` still works in the Docker image (`node:24-alpine`). Older npm versions write lockfiles it rejects; if that happens, regenerate `package-lock.json` with npm ≥ 11.16.
+- The frontend needs **npm ≥ 11.16** (`npm install -g npm@latest`). Older versions write a `package-lock.json` that `npm ci` in the Docker image rejects, so `frontend/.npmrc` makes them refuse to install.
 
 ## Reporting bugs and ideas
 

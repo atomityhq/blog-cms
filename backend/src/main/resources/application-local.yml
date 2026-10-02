@@ -1,9 +1,10 @@
-# Local development only — matches the postgres service in the root docker-compose.yml.
+# Local development only — talks to the postgres service from the root docker-compose.yml (`make db`).
 spring:
+  # Same values as the root .env (loaded by `make backend`), with docker-compose's defaults.
   datasource:
-    url: jdbc:postgresql://localhost:5432/blog_crm
-    username: blog_crm
-    password: blog_crm
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:blog_crm}
+    username: ${POSTGRES_USER:blog_crm}
+    password: ${POSTGRES_PASSWORD:blog_crm}
 
 blogcrm:
   # Local development only: sign in as admin@example.com / admin.

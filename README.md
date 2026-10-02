@@ -6,10 +6,8 @@ An open-source CRM for writing, managing and publishing blog posts.
 - **Backend** — Spring Boot 3.4, Java 21, Gradle
 - **Database** — PostgreSQL 16, schema managed by Flyway
 
-> **Status:** the backend API (posts, authors, tags, media, admin login) is in place, and
-> every CRM screen exists in the frontend. The frontend still runs on sample data stored in
-> the browser (sign in with any email and password); connecting it to the API only changes
-> the `api.ts` files in `frontend/src/modules/*`.
+> **Status:** the CRM works end to end — write, edit and publish posts, manage authors,
+> tags and images, all stored in PostgreSQL through the Spring Boot API.
 
 ## Repository layout
 
@@ -44,7 +42,7 @@ With the defaults from `.env.example` you sign in as **admin@example.com / admin
 
 ## Local development
 
-Requires **Java 21**, **Node.js ≥ 20.9** and Docker (for Postgres and backend tests).
+Requires **Java 21**, **Node.js ≥ 20.9** with **npm ≥ 11.16**, and Docker (for Postgres and backend tests).
 
 ```bash
 make db                                   # start Postgres only
@@ -76,6 +74,7 @@ make install && make frontend             # Next.js on :3000
 | `MEDIA_STORAGE_PATH`         | backend  | Directory for uploaded images (default `./data/media`) |
 | `SERVER_PORT`                | backend  | HTTP port (default `8080`)                   |
 | `BACKEND_API_URL`            | frontend | Backend base URL, used server-side only      |
+| `SESSION_COOKIE_SECURE`      | frontend | `false` to allow sign-in over plain HTTP on a host other than localhost (default: on in production) |
 
 The admin password is never configured in plain text. Generate its hash with:
 

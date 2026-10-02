@@ -1,3 +1,5 @@
+import type { NextRequest } from "next/server";
+
 /**
  * Base URL of the Spring Boot backend. Server-only: the browser never calls the
  * backend directly — it goes through this app's route handlers, which keeps the
@@ -13,4 +15,23 @@ export function backendBaseUrl(): string {
   }
   // Callers append their own leading "/" — strip a trailing one to avoid "//".
   return url.replace(/\/+$/, "");
+}
+
+/**
+ * Headers passed on to the backend for every proxied call: the caller's address (the
+ * backend rate-limits sign-in attempts per client) and the correlation ID, so one
+ * request can be followed through both services' logs.
+ */
+export function forwardingHeaders(request: NextRequest): Headers {
+  const headers = new Headers();
+  const forwardedFor = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip");
+  if (forwardedFor) headers.set("X-Forwarded-For", forwardedFor);
+  const correlationId = request.headers.get("x-correlation-id");
+  if (correlationId) headers.set("X-Correlation-ID", correlationId);
+  return headers;
+}
+
+/** The error envelope, for failures that happen here rather than in the backend. */
+export function errorBody(errorCode: string, message: string) {
+  return { errors: [{ errorCode, message }] };
 }

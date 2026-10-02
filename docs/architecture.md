@@ -91,24 +91,32 @@ keys, timestamps as UTC `Instant` / `TIMESTAMPTZ`, REST paths under
 
 ```
 src/
-├── app/          Routes only (pages, layouts, route handlers) — each page renders a module canvas
+├── app/          Routes (pages render a module canvas) and route handlers: api/auth/*, api/v1/[...path] proxy
 ├── modules/      One folder per feature (posts, authors, tags, media, auth):
 │                 *Canvas.tsx screens + api.ts, the feature's only data access
 ├── components/   Shared UI: ui/ (primitives) and shell/ (sidebar, top bar, navigation guard)
 ├── hooks/        useAsync, useDebouncedValue, useUnsavedChangesWarning
-├── lib/          Helpers (slug, content, format) and mock/ (in-browser mock database)
+├── lib/          api-client (browser → /api/v1 proxy), backend + session (server), slug, content, format
 ├── styles/       tokens.css (design tokens), base, component classes, editor typography
 ├── types/        Domain types mirroring the backend's JSON (Post, Author, Tag, Media, Page)
 └── proxy.ts      Route gate: no session cookie → /login
 ```
 
-### Data access and the mock
+### Data access
 
-Screens never fetch directly; they call functions in `modules/<feature>/api.ts`,
-each documented with the backend endpoint it maps to. Until the backend exists,
-those functions read and write `lib/mock/db.ts` — a normalised copy of the planned
-tables kept in `localStorage`, seeded from `lib/mock/seed.ts`. Switching to the
-real API replaces the function bodies only; types and screens stay as they are.
+Screens never fetch directly; they call functions in `modules/<feature>/api.ts`, one per
+backend endpoint. Those go through `lib/api-client.ts` to this app's own `/api/v1/*`
+route (`app/api/v1/[...path]/route.ts`), which:
+
+- forwards the request to `${BACKEND_API_URL}/api/v1/*`, streaming bodies both ways
+  (image uploads and downloads included);
+- turns the httpOnly `blogcrm_session` cookie into `Authorization: Bearer <token>`;
+- clears the cookie when the backend answers 401, and the client then sends the browser
+  to `/login?next=…`.
+
+`/api/auth/login` exchanges the admin credentials for the backend's JWT and stores it in
+the cookie (expiring with the token); `/api/auth/logout` deletes it. `proxy.ts` only
+checks that the cookie exists — the backend validates the token on every call.
 
 Post bodies are Tiptap (ProseMirror) **JSON**, never HTML. Images inside a body
 carry `attrs.mediaId`, so the backend can tell which library images a post uses.

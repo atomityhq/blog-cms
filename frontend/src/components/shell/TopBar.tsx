@@ -2,7 +2,6 @@
 
 import { Fragment } from "react";
 import { ChevronRight, PanelLeft } from "lucide-react";
-import { StatusChip } from "@/components/ui/StatusChip";
 import { GuardedLink } from "./NavigationGuard";
 
 export interface Crumb {
@@ -56,10 +55,6 @@ export function TopBar({ breadcrumb, onToggleSidebar }: TopBarProps) {
           );
         })}
       </nav>
-
-      <span title="This build runs on sample data stored in your browser — nothing is sent to a server.">
-        <StatusChip tone="draft">Mock data</StatusChip>
-      </span>
     </div>
   );
 }

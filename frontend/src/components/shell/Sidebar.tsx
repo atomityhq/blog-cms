@@ -1,12 +1,8 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-import { EllipsisVertical, FileText, Image as ImageIcon, LogOut, RotateCcw, Tag, Users, type LucideIcon } from "lucide-react";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { EllipsisVertical, FileText, Image as ImageIcon, LogOut, Tag, Users, type LucideIcon } from "lucide-react";
 import { Menu } from "@/components/ui/Menu";
-import { useToast } from "@/components/ui/Toast";
-import { resetDb } from "@/lib/mock/db";
 import { cn } from "@/lib/utils";
 import { Logo } from "./Logo";
 import { GuardedLink } from "./NavigationGuard";
@@ -27,8 +23,6 @@ const NAV: NavItem[] = [
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
-  const toast = useToast();
-  const [confirmReset, setConfirmReset] = useState(false);
 
   const signOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -84,7 +78,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           <>
             <div className="min-w-0 flex-1">
               <div className="truncate text-[12px] font-bold">Admin</div>
-              <div className="text-[10px] text-muted">Signed in</div>
+              <div className="text-[10px] text-muted">Administrator</div>
             </div>
             <Menu
               align="left"
@@ -98,31 +92,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
                   <EllipsisVertical size={14} />
                 </button>
               )}
-              items={[
-                { label: "Reset sample data", icon: RotateCcw, onSelect: () => setConfirmReset(true) },
-                "separator",
-                { label: "Sign out", icon: LogOut, onSelect: () => void signOut() },
-              ]}
+              items={[{ label: "Sign out", icon: LogOut, onSelect: () => void signOut() }]}
             />
           </>
         )}
       </div>
 
-      {confirmReset && (
-        <ConfirmDialog
-          title="Reset sample data?"
-          message="Every post, author, tag and image you created or changed in this browser will be replaced with the original sample data."
-          confirmLabel="Reset"
-          danger
-          onClose={() => setConfirmReset(false)}
-          onConfirm={() => {
-            resetDb();
-            toast.success("Sample data restored.");
-            // Hard reload so every screen drops what it had loaded.
-            window.location.reload();
-          }}
-        />
-      )}
     </aside>
   );
 }

@@ -42,6 +42,9 @@ services:
     build: ./frontend
     environment:
       BACKEND_API_URL: http://backend:8080
+      # This stack serves plain HTTP, where browsers other than Chrome/Firefox-on-localhost
+      # drop Secure cookies. Set to true in .env when serving over HTTPS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
