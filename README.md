@@ -6,8 +6,10 @@ An open-source CRM for writing, managing and publishing blog posts.
 - **Backend** — Spring Boot 3.4, Java 21, Gradle
 - **Database** — PostgreSQL 16, schema managed by Flyway
 
-> **Status:** the backend API (posts, authors, tags, media, admin login) is in place.
-> The CRM screens are being built against it.
+> **Status:** the backend API (posts, authors, tags, media, admin login) is in place, and
+> every CRM screen exists in the frontend. The frontend still runs on sample data stored in
+> the browser (sign in with any email and password); connecting it to the API only changes
+> the `api.ts` files in `frontend/src/modules/*`.
 
 ## Repository layout
 
