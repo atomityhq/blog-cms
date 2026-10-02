@@ -8,6 +8,9 @@ An open-source CRM for writing, managing and publishing blog posts.
 
 > **Status:** the backend API (posts, authors, tags, media, admin login) is in place.
 > The CRM screens are being built against it.
+> **Status:** the frontend runs as a working mockup on sample data stored in the browser
+> (sign in with any email and password). The backend API is in progress; once it lands,
+> only the `api.ts` files in `frontend/src/modules/*` change.
 
 ## Repository layout
 
