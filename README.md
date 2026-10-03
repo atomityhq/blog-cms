@@ -1,20 +1,18 @@
-# blog-crm
+# blog-cms
 
-An open-source CRM for writing, managing and publishing blog posts.
+An open-source CMS for writing, managing and publishing blog posts.
 
 - **Frontend** — Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4
 - **Backend** — Spring Boot 3.4, Java 21, Gradle
 - **Database** — PostgreSQL 16, schema managed by Flyway
 
-> **Status:** the backend API (posts, authors, tags, media, admin login) is in place, and
-> every CRM screen exists in the frontend. The frontend still runs on sample data stored in
-> the browser (sign in with any email and password); connecting it to the API only changes
-> the `api.ts` files in `frontend/src/modules/*`.
+> **Status:** the CMS works end to end — write, edit and publish posts, manage authors,
+> tags and images, all stored in PostgreSQL through the Spring Boot API.
 
 ## Repository layout
 
 ```
-blog-crm/
+blog-cms/
 ├── frontend/            Next.js admin UI (own package.json, Dockerfile)
 ├── backend/             Spring Boot API (own Gradle wrapper, Dockerfile)
 ├── docs/                Architecture notes
@@ -44,7 +42,7 @@ With the defaults from `.env.example` you sign in as **admin@example.com / admin
 
 ## Local development
 
-Requires **Java 21**, **Node.js ≥ 20.9** and Docker (for Postgres and backend tests).
+Requires **Java 21**, **Node.js ≥ 20.9** with **npm ≥ 11.16**, and Docker (for Postgres and backend tests).
 
 ```bash
 make db                                   # start Postgres only
@@ -66,7 +64,7 @@ make install && make frontend             # Next.js on :3000
 
 | Variable                     | App      | Description                                  |
 |------------------------------|----------|----------------------------------------------|
-| `SPRING_DATASOURCE_URL`      | backend  | JDBC URL, e.g. `jdbc:postgresql://host:5432/blog_crm` |
+| `SPRING_DATASOURCE_URL`      | backend  | JDBC URL, e.g. `jdbc:postgresql://host:5432/blog_cms` |
 | `SPRING_DATASOURCE_USERNAME` | backend  | Database user                                |
 | `SPRING_DATASOURCE_PASSWORD` | backend  | Database password                            |
 | `ADMIN_EMAIL`                | backend  | Email of the single admin account            |
@@ -76,6 +74,7 @@ make install && make frontend             # Next.js on :3000
 | `MEDIA_STORAGE_PATH`         | backend  | Directory for uploaded images (default `./data/media`) |
 | `SERVER_PORT`                | backend  | HTTP port (default `8080`)                   |
 | `BACKEND_API_URL`            | frontend | Backend base URL, used server-side only      |
+| `SESSION_COOKIE_SECURE`      | frontend | `false` to allow sign-in over plain HTTP on a host other than localhost (default: on in production) |
 
 The admin password is never configured in plain text. Generate its hash with:
 

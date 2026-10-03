@@ -13,7 +13,7 @@ export function LoginScreen({ next }: { next?: string }) {
               <div className="mb-3 flex items-center gap-2 font-mono text-[11px] font-bold tracking-[0.18em] text-muted uppercase before:h-0.5 before:w-[18px] before:bg-green-dark before:content-['']">
                 Admin
               </div>
-              <h1 className="mb-2 text-[30px] leading-tight font-bold tracking-[-0.02em]">Sign in to blog-crm</h1>
+              <h1 className="mb-2 text-[30px] leading-tight font-bold tracking-[-0.02em]">Sign in to blog-cms</h1>
               <p className="text-[13px] text-muted">Write, manage and publish your blog posts.</p>
             </div>
             <LoginForm next={next} />
@@ -24,7 +24,7 @@ export function LoginScreen({ next }: { next?: string }) {
         <p className="max-w-[420px] text-[26px] leading-snug font-bold tracking-[-0.01em]">
           Drafts, reviews and publishing — <span className="text-green">all in one place.</span>
         </p>
-        <p className="mt-3 max-w-[420px] text-[13px] opacity-60">An open-source CRM for your blog.</p>
+        <p className="mt-3 max-w-[420px] text-[13px] opacity-60">An open-source CMS for your blog.</p>
       </div>
     </div>
   );

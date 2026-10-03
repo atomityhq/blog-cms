@@ -96,10 +96,6 @@ export function LoginForm({ next }: { next?: string }) {
         {submitting && <Spinner size={13} />}
         Sign in
       </button>
-
-      <p className="rounded-md bg-green-tint px-3 py-2 text-[12px] text-secondary">
-        <strong>Mockup:</strong> any email address and password will sign you in.
-      </p>
     </form>
   );
 }

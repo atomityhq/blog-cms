@@ -1,9 +1,10 @@
 {
-  "name": "blog-crm-frontend",
+  "name": "blog-cms-frontend",
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.9"
+    "node": ">=20.9",
+    "npm": ">=11.16"
   },
   "scripts": {
     "dev": "next dev",

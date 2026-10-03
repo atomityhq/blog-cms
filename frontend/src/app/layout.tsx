@@ -13,7 +13,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Blog CRM",
+  title: "Blog CMS",
   description: "Write, manage and publish blog posts.",
   // Admin tool: never index it, even if it ends up publicly reachable.
   robots: { index: false, follow: false },

@@ -14,7 +14,8 @@ down: ## Stop the Docker stack (data volume is kept)
 db: ## Start only Postgres in Docker, for running backend/frontend locally
 	docker compose up -d postgres
 
-backend: ## Run the backend locally against the Docker Postgres
+backend: ## Run the backend locally against the Docker Postgres (reads .env if present)
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	cd backend && SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 
 frontend: ## Run the frontend dev server
