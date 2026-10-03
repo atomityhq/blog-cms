@@ -89,7 +89,7 @@ See [`backend/.env.example`](backend/.env.example) and [`frontend/.env.example`]
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md). Security issues: see [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping out! This guide covers how to get set up and what we expect in a pull request.
+Thanks for helping out! This guide covers how to get set up and what we expect in a pull request. By taking part, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Setup
 
