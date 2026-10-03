@@ -1,18 +1,18 @@
-# blog-crm
+# blog-cms
 
-An open-source CRM for writing, managing and publishing blog posts.
+An open-source CMS for writing, managing and publishing blog posts.
 
 - **Frontend** — Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4
 - **Backend** — Spring Boot 3.4, Java 21, Gradle
 - **Database** — PostgreSQL 16, schema managed by Flyway
 
-> **Status:** the CRM works end to end — write, edit and publish posts, manage authors,
+> **Status:** the CMS works end to end — write, edit and publish posts, manage authors,
 > tags and images, all stored in PostgreSQL through the Spring Boot API.
 
 ## Repository layout
 
 ```
-blog-crm/
+blog-cms/
 ├── frontend/            Next.js admin UI (own package.json, Dockerfile)
 ├── backend/             Spring Boot API (own Gradle wrapper, Dockerfile)
 ├── docs/                Architecture notes
@@ -64,7 +64,7 @@ make install && make frontend             # Next.js on :3000
 
 | Variable                     | App      | Description                                  |
 |------------------------------|----------|----------------------------------------------|
-| `SPRING_DATASOURCE_URL`      | backend  | JDBC URL, e.g. `jdbc:postgresql://host:5432/blog_crm` |
+| `SPRING_DATASOURCE_URL`      | backend  | JDBC URL, e.g. `jdbc:postgresql://host:5432/blog_cms` |
 | `SPRING_DATASOURCE_USERNAME` | backend  | Database user                                |
 | `SPRING_DATASOURCE_PASSWORD` | backend  | Database password                            |
 | `ADMIN_EMAIL`                | backend  | Email of the single admin account            |

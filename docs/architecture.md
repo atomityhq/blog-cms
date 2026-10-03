@@ -73,8 +73,8 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
 Code is grouped by feature, then by layer:
 
 ```
-io.atomity.blogcrm
-├── BlogCrmApplication
+io.atomity.blogcms
+├── BlogCmsApplication
 ├── shared/            ApiResponse, ApiError, ApiException, GlobalExceptionHandler,
 │                      CorrelationFilter, PageMeta, Slugs, Timestamps
 ├── auth/              config/ (SecurityConfig, AuthProperties) controller/ dto/ service/
@@ -110,7 +110,7 @@ route (`app/api/v1/[...path]/route.ts`), which:
 
 - forwards the request to `${BACKEND_API_URL}/api/v1/*`, streaming bodies both ways
   (image uploads and downloads included);
-- turns the httpOnly `blogcrm_session` cookie into `Authorization: Bearer <token>`;
+- turns the httpOnly `blogcms_session` cookie into `Authorization: Bearer <token>`;
 - clears the cookie when the backend answers 401, and the client then sends the browser
   to `/login?next=…`.
 

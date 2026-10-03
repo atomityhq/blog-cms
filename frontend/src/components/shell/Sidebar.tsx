@@ -41,7 +41,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           collapsed ? "justify-center" : "px-4",
         )}
       >
-        <GuardedLink href="/posts" aria-label="blog-crm — posts">
+        <GuardedLink href="/posts" aria-label="blog-cms — posts">
           <Logo collapsed={collapsed} />
         </GuardedLink>
       </div>

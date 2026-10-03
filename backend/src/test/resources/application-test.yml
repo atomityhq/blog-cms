@@ -1,4 +1,4 @@
-blogcrm:
+blogcms:
   admin:
     email: admin@test.local
     # bcrypt("test-password"), cost 4 to keep tests fast

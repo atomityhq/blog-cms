@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LoginScreen } from "@/modules/auth/LoginScreen";
 
-export const metadata: Metadata = { title: "Sign in · Blog CRM" };
+export const metadata: Metadata = { title: "Sign in · Blog CMS" };
 
 export default async function LoginPage(props: PageProps<"/login">) {
   const { next } = await props.searchParams;

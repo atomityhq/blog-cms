@@ -5,7 +5,7 @@ import type { NextResponse } from "next/server";
  * API proxy. It holds the JWT the backend issues at login — httpOnly, so client code
  * never sees it; the API proxy forwards it as `Authorization: Bearer`.
  */
-export const SESSION_COOKIE = "blogcrm_session";
+export const SESSION_COOKIE = "blogcms_session";
 
 /** Routes reachable without a session. */
 export const PUBLIC_PATHS = ["/login"];

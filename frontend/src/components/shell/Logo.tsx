@@ -7,7 +7,7 @@ export function Logo({ collapsed = false, className }: { collapsed?: boolean; cl
       <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-green font-mono text-[12px] font-bold text-ink">
         B
       </span>
-      {!collapsed && <span className="font-mono text-[13px] font-bold tracking-[0.04em] uppercase">blog-crm</span>}
+      {!collapsed && <span className="font-mono text-[13px] font-bold tracking-[0.04em] uppercase">blog-cms</span>}
     </span>
   );
 }

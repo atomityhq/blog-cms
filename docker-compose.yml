@@ -1,14 +1,14 @@
 # Full local stack: `docker compose up --build`, then open http://localhost:3000.
 # Values come from .env (copy .env.example); the defaults below are for local use only.
-name: blog-crm
+name: blog-cms
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-blog_crm}
-      POSTGRES_USER: ${POSTGRES_USER:-blog_crm}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blog_crm}
+      POSTGRES_DB: ${POSTGRES_DB:-blog_cms}
+      POSTGRES_USER: ${POSTGRES_USER:-blog_cms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blog_cms}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -22,9 +22,9 @@ services:
   backend:
     build: ./backend
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-blog_crm}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-blog_crm}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-blog_crm}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-blog_cms}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-blog_cms}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-blog_cms}
       # Local defaults sign you in as admin@example.com / admin. Override all three in .env for anything real.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-$$2a$$10$$wBISilJqYrK8S7ddSh4zhuWUnPjn24l5hToR4l4lIkKH/WG.fsKI6}
