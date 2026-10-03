@@ -1,0 +1,88 @@
+name: 🐛 Bug report
+description: Something doesn't work the way it should.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this! Please search [existing issues](../issues) first.
+        **Security problem?** Don't file it here — report it privately (see SECURITY.md).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: Publishing a post with a cover image shows "Something went wrong".
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem.
+      placeholder: |
+        1. Sign in and open Posts → New post
+        2. Add a title, some text and a cover image
+        3. Click Publish
+        4. See the error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: The post is published and its status changes to PUBLISHED.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Frontend (UI)
+        - Backend (API)
+        - Database / migrations
+        - Docker / setup
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: A release tag or the output of `git rev-parse --short HEAD`.
+      placeholder: v0.1.0 or 8cfd1a8
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: How you run it and where you see the problem.
+      placeholder: |
+        - Running via: docker compose / make backend + npm run dev
+        - OS: Ubuntu 24.04
+        - Browser: Chrome 130
+        - Java / Node versions (if running locally): 21 / 22.16
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Error messages, backend log lines (include the `correlationId`), browser console output or screenshots. **Remove any secrets or tokens first.**
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this hasn't been reported yet.
+          required: true
+        - label: I removed passwords, tokens and other secrets from what I pasted.
+          required: true

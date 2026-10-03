@@ -1,6 +1,6 @@
 # One entry point for both stacks. Run `make help` for the list.
 .DEFAULT_GOAL := help
-.PHONY: help up down db backend frontend install test lint check clean
+.PHONY: help up down db backend frontend install hooks test lint check clean
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -21,8 +21,12 @@ backend: ## Run the backend locally against the Docker Postgres (reads .env if p
 frontend: ## Run the frontend dev server
 	cd frontend && npm run dev
 
-install: ## Install frontend dependencies
+install: hooks ## Install frontend dependencies and the git hooks
 	cd frontend && npm ci
+
+hooks: ## Enable the repo's git hooks (.githooks): checks run before every commit and push
+	git config core.hooksPath .githooks
+	@echo "Git hooks enabled (.githooks/pre-commit, .githooks/pre-push)."
 
 test: ## Run backend tests (needs Docker for Testcontainers)
 	cd backend && ./gradlew test
