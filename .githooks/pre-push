@@ -1,60 +1,48 @@
 #!/bin/sh
-# Pre-push checks: the fuller suite, for the parts of the repo that changed.
+# Pre-push checks: deliberately light — no builds, no tests (those run at commit time,
+# see pre-commit). Only quick guards that also catch commits made with --no-verify.
 # Bypass in an emergency with `git push --no-verify` (or SKIP_HOOKS=1).
 set -eu
-# File lists are split on newlines only, and never glob-expanded (paths like posts/[id]/page.tsx).
 set -f
 IFS='
 '
 
 [ "${SKIP_HOOKS:-0}" = "1" ] && exit 0
 
-root=$(git rev-parse --show-toplevel)
-cd "$root"
-
 fail() {
   printf '\n\033[31m✖ pre-push: %s\033[0m\n' "$1" >&2
   exit 1
 }
-step() {
-  printf '\033[36m▸ %s\033[0m\n' "$1"
-}
 
 zero=0000000000000000000000000000000000000000
-changed=""
 # Git passes one line per ref being pushed: <local ref> <local sha> <remote ref> <remote sha>
 while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$zero" ] && continue # deleting a branch: nothing to check
+
+  # main is protected: changes reach it through pull requests only.
+  case "$remote_ref" in
+    refs/heads/main | refs/heads/master)
+      fail "pushing directly to ${remote_ref#refs/heads/} isn't allowed — push a branch and open a pull request." ;;
+  esac
+
+  # The commits being pushed: everything not on the remote yet.
   if [ "$remote_sha" = "$zero" ]; then
-    # New branch: compare with the remote's main if we have it, otherwise check everything.
-    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
+    range=$(git rev-list "$local_sha" --not --remotes 2>/dev/null || true)
   else
-    base=$remote_sha
+    range=$(git rev-list "$remote_sha..$local_sha")
   fi
-  if [ -n "$base" ]; then
-    changed="$changed
-$(git diff --name-only "$base" "$local_sha")"
-  else
-    changed="$changed
-frontend/
-backend/"
-  fi
+  [ -z "$range" ] && continue
+  oldest=$(printf '%s\n' "$range" | tail -n 1)
+  base=$(git rev-parse --verify --quiet "$oldest^" || git hash-object -t tree /dev/null)
+
+  files=$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha")
+  env_files=$(printf '%s\n' "$files" | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -v '\.example$' || true)
+  [ -n "$env_files" ] && fail "environment file(s) in the commits being pushed:
+$env_files"
+
+  added=$(git diff -U0 --diff-filter=ACMR "$base" "$local_sha" | grep -E '^\+' || true)
+  printf '%s\n' "$added" | grep -qE -- '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----' && fail "a private key is in the commits being pushed."
+  printf '%s\n' "$added" | grep -qE '^\+(<<<<<<< |>>>>>>> )' && fail "merge-conflict markers in the commits being pushed."
 done
-
-frontend_changed=$(printf '%s\n' "$changed" | grep -q '^frontend/' && echo yes || echo no)
-backend_changed=$(printf '%s\n' "$changed" | grep -q '^backend/' && echo yes || echo no)
-
-if [ "$frontend_changed" = yes ]; then
-  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run: cd frontend && npm install"
-  step "Frontend: lint, type check and production build"
-  (cd frontend && npm run --silent check) || fail "frontend checks failed."
-fi
-
-if [ "$backend_changed" = yes ]; then
-  docker info >/dev/null 2>&1 || fail "Docker isn't running — the backend tests need it for PostgreSQL (Testcontainers).
-Start Docker and push again, or skip once with: git push --no-verify"
-  step "Backend: tests"
-  (cd backend && ./gradlew test --quiet --console=plain) || fail "backend tests failed (report: backend/build/reports/tests/test/index.html)."
-fi
 
 printf '\033[32m✔ pre-push checks passed\033[0m\n'

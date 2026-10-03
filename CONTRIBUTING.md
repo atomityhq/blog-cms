@@ -13,8 +13,8 @@ backend-only contributors can run `make hooks` instead.
 
 | Hook | When | What it checks |
 |------|------|----------------|
-| `pre-commit` | `git commit` | No `.env` files, private keys, conflict markers or files over 5 MB. Staged frontend files: ESLint + type check. Staged backend files: the backend compiles (main and tests). |
-| `pre-push` | `git push` | For whatever changed since the remote: frontend lint, type check and production build; backend test suite (needs Docker running). |
+| `pre-commit` | `git commit` | No `.env` files, private keys, conflict markers or files over 5 MB. Staged frontend files: ESLint, type check and production build. Staged backend files: `gradle build` — compile and tests (needs Docker running). |
+| `pre-push` | `git push` | Light, about a second: refuses direct pushes to `main`, and re-checks the outgoing commits for `.env` files, private keys and conflict markers (in case a commit skipped its hook). No builds or tests. |
 
 The hooks live in `.githooks/`. To skip them once, in an emergency, use `--no-verify` (or `SKIP_HOOKS=1`).
 
@@ -43,5 +43,5 @@ Read [docs/architecture.md](docs/architecture.md) first. In short:
 
 ## Reporting bugs and ideas
 
-Open an issue with steps to reproduce, what you expected, and what happened.
+Open an issue and pick the form that fits — bug report, feature request, documentation issue, or question/discussion. Pull requests use a template with a description, how to test, and a checklist; fill in what applies.
 For security problems, follow [SECURITY.md](SECURITY.md) instead.
