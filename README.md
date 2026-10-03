@@ -49,7 +49,7 @@ make db                                   # start Postgres only
 make backend                              # Spring Boot on :8080 (profile: local)
 
 cp frontend/.env.example frontend/.env.local
-make install && make frontend             # Next.js on :3000
+make install && make frontend             # Next.js on :3000 (also enables the git hooks)
 ```
 
 ### Useful commands

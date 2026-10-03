@@ -1,0 +1,60 @@
+#!/bin/sh
+# Pre-push checks: the fuller suite, for the parts of the repo that changed.
+# Bypass in an emergency with `git push --no-verify` (or SKIP_HOOKS=1).
+set -eu
+# File lists are split on newlines only, and never glob-expanded (paths like posts/[id]/page.tsx).
+set -f
+IFS='
+'
+
+[ "${SKIP_HOOKS:-0}" = "1" ] && exit 0
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+fail() {
+  printf '\n\033[31m✖ pre-push: %s\033[0m\n' "$1" >&2
+  exit 1
+}
+step() {
+  printf '\033[36m▸ %s\033[0m\n' "$1"
+}
+
+zero=0000000000000000000000000000000000000000
+changed=""
+# Git passes one line per ref being pushed: <local ref> <local sha> <remote ref> <remote sha>
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue # deleting a branch: nothing to check
+  if [ "$remote_sha" = "$zero" ]; then
+    # New branch: compare with the remote's main if we have it, otherwise check everything.
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
+  else
+    base=$remote_sha
+  fi
+  if [ -n "$base" ]; then
+    changed="$changed
+$(git diff --name-only "$base" "$local_sha")"
+  else
+    changed="$changed
+frontend/
+backend/"
+  fi
+done
+
+frontend_changed=$(printf '%s\n' "$changed" | grep -q '^frontend/' && echo yes || echo no)
+backend_changed=$(printf '%s\n' "$changed" | grep -q '^backend/' && echo yes || echo no)
+
+if [ "$frontend_changed" = yes ]; then
+  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run: cd frontend && npm install"
+  step "Frontend: lint, type check and production build"
+  (cd frontend && npm run --silent check) || fail "frontend checks failed."
+fi
+
+if [ "$backend_changed" = yes ]; then
+  docker info >/dev/null 2>&1 || fail "Docker isn't running — the backend tests need it for PostgreSQL (Testcontainers).
+Start Docker and push again, or skip once with: git push --no-verify"
+  step "Backend: tests"
+  (cd backend && ./gradlew test --quiet --console=plain) || fail "backend tests failed (report: backend/build/reports/tests/test/index.html)."
+fi
+
+printf '\033[32m✔ pre-push checks passed\033[0m\n'
