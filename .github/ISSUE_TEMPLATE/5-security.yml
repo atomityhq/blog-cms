@@ -1,4 +1,4 @@
-name: 🛡️ Security hardening or question (public)
+name: Security hardening or question (public)
 description: Non-sensitive security topics only. Real vulnerabilities must be reported privately.
 title: "security: "
 labels: ["security"]
@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## ⚠️ Stop — this issue would be public
+        ## Stop — this issue would be public
 
         **Never describe an exploitable vulnerability in a public issue.** Report it privately instead:
         **[Report a vulnerability privately](https://github.com/atomityhq/blog-crm/security/advisories/new)** — only the maintainers can see it.

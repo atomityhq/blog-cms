@@ -11,12 +11,12 @@ Closes #
 
 ## Type of change
 
-- [ ] 🐛 Bug fix
-- [ ] ✨ New feature
-- [ ] ♻️ Refactor (no behaviour change)
-- [ ] 📚 Documentation
-- [ ] 🔧 Build, CI or tooling
-- [ ] ⚠️ Breaking change (API, database or config changes that need action from users)
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Refactor (no behaviour change)
+- [ ] Documentation
+- [ ] Build, CI or tooling
+- [ ] Breaking change (API, database or config changes that need action from users)
 
 ## Steps to reproduce / how to test
 
