@@ -50,6 +50,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         // Image files are public so published pages can embed them.
                         .requestMatchers(HttpMethod.GET, "/api/v1/media/*/file").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/blogs/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> {

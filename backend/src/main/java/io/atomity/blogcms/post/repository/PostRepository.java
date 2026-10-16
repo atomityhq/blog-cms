@@ -1,12 +1,16 @@
 package io.atomity.blogcms.post.repository;
 
 import io.atomity.blogcms.post.entity.Post;
+import io.atomity.blogcms.post.entity.PostStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -18,6 +22,12 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
 
     @Query("SELECT p.status AS status, COUNT(p) AS count FROM Post p GROUP BY p.status")
     List<StatusCount> countByStatus();
+
+    Page<Post> findByStatus(PostStatus status, Pageable pageable);
+
+    Optional<Post> findByIdAndStatus(UUID id, PostStatus status);
+
+    Optional<Post> findBySlugAndStatus(String slug, PostStatus status);
 
     interface StatusCount {
         io.atomity.blogcms.post.entity.PostStatus getStatus();
