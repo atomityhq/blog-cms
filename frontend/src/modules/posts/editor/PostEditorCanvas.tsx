@@ -22,6 +22,8 @@ import { POST_LIMITS, type Post } from "@/types/post";
 import { archivePost, createPost, deletePost, duplicatePost, getPost, publishPost, unpublishPost, updatePost } from "../api";
 import { EditorSidebar, type EditorMeta } from "./EditorSidebar";
 import { EMPTY_FORM, formFromPost, inputFromForm, validateForm, type EditorForm } from "./form";
+import { MarkdownDropzone } from "./MarkdownDropzone";
+import type { ParsedMarkdownResult } from "./markdownParser";
 import { RichTextEditor } from "./RichTextEditor";
 
 /** Route entry: loads the post (or starts a blank one), then hands over to the editor. */
@@ -96,6 +98,26 @@ function PostEditor({ initial }: { initial: Post | null }) {
   }, []);
 
   const onContentChange = useCallback((content: EditorForm["content"]) => change({ content }), [change]);
+
+  const handleMarkdownParsed = useCallback(
+    (result: ParsedMarkdownResult) => {
+      const patch: Partial<EditorForm> = {
+        content: result.doc,
+      };
+      if (result.title && !form.title.trim()) {
+        patch.title = result.title;
+      }
+      if (result.slug && !form.slug.trim()) {
+        patch.slug = result.slug;
+      }
+      if (result.excerpt && !form.excerpt.trim()) {
+        patch.excerpt = result.excerpt;
+      }
+      change(patch);
+      toast.success(`Loaded "${result.fileName}" into the editor.`);
+    },
+    [change, form.excerpt, form.slug, form.title, toast],
+  );
 
   const reportError = (error: unknown) => {
     toast.error(error instanceof Error ? error.message : "Something went wrong.");
@@ -282,6 +304,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
               )}
             </div>
           </div>
+          <MarkdownDropzone onFileParsed={handleMarkdownParsed} onError={(err) => toast.error(err)} />
           <RichTextEditor value={form.content} onChange={onContentChange} />
         </div>
 

@@ -76,6 +76,15 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
     },
   });
 
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const currentJSON = JSON.stringify(editor.getJSON());
+    const incomingJSON = JSON.stringify(value);
+    if (currentJSON !== incomingJSON) {
+      editor.commands.setContent(value, { emitUpdate: false });
+    }
+  }, [editor, value]);
+
   return (
     <div className="rounded-lg border-[1.5px] border-line bg-card shadow-card">
       {editor ? <Toolbar editor={editor} /> : <div className="h-[42px] border-b border-line" />}
