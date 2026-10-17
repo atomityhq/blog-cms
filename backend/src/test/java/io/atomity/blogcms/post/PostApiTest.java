@@ -228,6 +228,70 @@ class PostApiTest extends IntegrationTest {
     }
 
     @Test
+    void publicBlogListIsUnauthenticatedAndContainsOnlyPublishedPosts() throws Exception {
+        createPost("Draft blog", "Not public.");
+        String published = createPost("Published blog", "Public content.").path("id").asText();
+        call(post("/api/v1/posts/" + published + "/publish")).andExpect(status().isOk());
+        String archived = createPost("Archived blog", "No longer public.").path("id").asText();
+        call(post("/api/v1/posts/" + archived + "/publish")).andExpect(status().isOk());
+        call(post("/api/v1/posts/" + archived + "/archive")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].slug").value("published-blog"))
+                .andExpect(jsonPath("$.data[0].content").doesNotExist())
+                .andExpect(jsonPath("$.data[0].status").doesNotExist())
+                .andExpect(jsonPath("$.data[0].updatedAt").doesNotExist())
+                .andExpect(jsonPath("$.meta.page").value(0))
+                .andExpect(jsonPath("$.meta.size").value(10))
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.meta.totalPages").value(1));
+    }
+
+    @Test
+    void publicBlogDetailIsUnauthenticatedAndHiddenUnlessPublished() throws Exception {
+        String draft = createPost("Draft blog", "Not public.").path("id").asText();
+        String published = createPost("Public guide", "Full public content.").path("id").asText();
+        call(post("/api/v1/posts/" + published + "/publish")).andExpect(status().isOk());
+        String archived = createPost("Archived blog", "Not public anymore.").path("id").asText();
+        call(post("/api/v1/posts/" + archived + "/publish")).andExpect(status().isOk());
+        call(post("/api/v1/posts/" + archived + "/archive")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs/" + published))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.slug").value("public-guide"))
+                .andExpect(jsonPath("$.data.content.content[0].content[0].text").value("Full public content."))
+                .andExpect(jsonPath("$.data.status").doesNotExist())
+                .andExpect(jsonPath("$.data.version").doesNotExist())
+                .andExpect(jsonPath("$.data.focusKeyword").doesNotExist());
+
+        mockMvc.perform(get("/api/v1/blogs/" + draft))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("NOT_FOUND"));
+        mockMvc.perform(get("/api/v1/blogs/" + archived))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/blogs/00000000-0000-0000-0000-000000000000"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void publicBlogListPaginates() throws Exception {
+        for (String title : List.of("Public one", "Public two", "Public three")) {
+            String id = createPost(title, "Body.").path("id").asText();
+            call(post("/api/v1/posts/" + id + "/publish")).andExpect(status().isOk());
+        }
+
+        mockMvc.perform(get("/api/v1/blogs?page=1&size=2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.meta.page").value(1))
+                .andExpect(jsonPath("$.meta.size").value(2))
+                .andExpect(jsonPath("$.meta.totalElements").value(3))
+                .andExpect(jsonPath("$.meta.totalPages").value(2));
+    }
+
+    @Test
     void countsCoverEveryStatus() throws Exception {
         createPost("Draft one", "x");
         String id = createPost("Published one", "y").path("id").asText();
