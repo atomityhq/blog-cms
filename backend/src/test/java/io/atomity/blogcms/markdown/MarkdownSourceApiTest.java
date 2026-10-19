@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 
 class MarkdownSourceApiTest extends IntegrationTest {
 
@@ -103,4 +104,45 @@ class MarkdownSourceApiTest extends IntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].errorCode").value("UNKNOWN_REFERENCE"));
     }
+    @Test
+void deletingMarkdownRemovesTheFile() throws Exception {
+    // Upload a Markdown file.
+    JsonNode source = upload("delete-me.md", MARKDOWN);
+
+    String sourceId = source.path("id").asText();
+    String fileUrl = source.path("url").asText();
+
+    // Verify that the file exists.
+    call(get(fileUrl))
+            .andExpect(status().isOk());
+
+    // Delete the Markdown file.
+    call(delete("/api/v1/markdown-sources/" + sourceId))
+            .andExpect(status().isNoContent());
+
+    // The file should no longer be accessible.
+    call(get(fileUrl))
+            .andExpect(status().isNotFound());
+}
+@Test
+void markdownInUseCannotBeDeleted() throws Exception {
+    // Upload a Markdown file.
+    JsonNode source = upload("in-use.md", MARKDOWN);
+    String sourceId = source.path("id").asText();
+
+    // Create a post that references the Markdown file.
+call(post("/api/v1/posts"), postBody("Using Markdown", sourceId))
+        .andExpect(status().isCreated());
+
+    // Deletion must be rejected while the file is in use.
+    call(delete("/api/v1/markdown-sources/" + sourceId))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.errors[0].errorCode")
+                    .value("MARKDOWN_IN_USE"));
+
+    // The original file must still be accessible.
+    call(get(source.path("url").asText()))
+            .andExpect(status().isOk())
+            .andExpect(content().bytes(MARKDOWN));
+}
 }

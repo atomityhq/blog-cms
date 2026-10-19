@@ -1,4 +1,6 @@
 package io.atomity.blogcms.markdown.service;
+import io.atomity.blogcms.post.repository.PostRepository;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import io.atomity.blogcms.markdown.dto.MarkdownSourceRef;
 import io.atomity.blogcms.markdown.entity.MarkdownSource;
@@ -36,15 +38,49 @@ public class MarkdownSourceService {
     private final MarkdownSourceRepository repository;
     private final StorageService storage;
 
-    public MarkdownSourceService(MarkdownSourceRepository repository, StorageService storage) {
+    private final PostRepository postRepository;
+    private final TransactionTemplate transactionTemplate;
+
+    public MarkdownSourceService(
+            MarkdownSourceRepository repository,
+            StorageService storage,
+            PostRepository postRepository,
+            TransactionTemplate transactionTemplate) {
+
         this.repository = repository;
         this.storage = storage;
+        this.postRepository = postRepository;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Transactional(readOnly = true)
     public MarkdownSource get(UUID id) {
         return repository.findById(id).orElseThrow(() -> ApiException.notFound("Markdown file"));
     }
+    public void delete(UUID id) {
+    String key = transactionTemplate.execute(status -> {
+        MarkdownSource source = repository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Markdown file"));
+
+        long usages = postRepository.countByMarkdownSource_Id(id);
+
+        if (usages > 0) {
+            throw ApiException.conflict(
+                    "MARKDOWN_IN_USE",
+                    "This Markdown file is used by %d post(s). Remove its references first."
+                            .formatted(usages));
+        }
+
+        String storageKey = source.getStorageKey();
+        repository.delete(source);
+
+        return storageKey;
+    });
+
+    if (key != null) {
+        storage.delete(key);
+    }
+}
 
     /** Stores the file, then records it. The file is removed again if the database write fails. */
     @Transactional
