@@ -35,8 +35,9 @@ There is one admin account, configured through environment variables
    (5 per 15 minutes).
 2. The frontend keeps the token in an httpOnly cookie and forwards it as
    `Authorization: Bearer` on every API call.
-3. Everything under `/api/v1` needs the token, except login and
-   `GET /api/v1/media/{id}/file` (images are public so published pages can embed them).
+3. Everything under `/api/v1` needs the token, except login,
+   `GET /api/v1/media/{id}/file` (images are public so published pages can embed them) and
+   `GET /api/v1/blogs/**` (published posts, for a public blog front end).
 
 ## API
 
@@ -52,6 +53,7 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
 | `GET/POST /authors`, `PUT/DELETE /authors/{id}` | Authors |
 | `GET/POST /tags`, `PUT/DELETE /tags/{id}` | Tags |
 | `GET/POST /media` (multipart `file`), `PATCH/DELETE /media/{id}`, `GET /media/{id}/file` | Image library |
+| `GET /blogs?sort&direction&page&size`, `GET /blogs/{id}`, `GET /blogs/slug/{slug}` | Public, no token: published posts only, newest first by default; anything else is `404` |
 
 ### Business rules
 
