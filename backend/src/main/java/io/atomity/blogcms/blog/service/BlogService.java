@@ -3,6 +3,7 @@ package io.atomity.blogcms.blog.service;
 import io.atomity.blogcms.blog.dto.BlogListQuery;
 import io.atomity.blogcms.blog.dto.BlogResponse;
 import io.atomity.blogcms.blog.dto.BlogSummaryResponse;
+import io.atomity.blogcms.post.entity.Post;
 import io.atomity.blogcms.post.entity.PostStatus;
 import io.atomity.blogcms.post.repository.PostRepository;
 import io.atomity.blogcms.post.repository.PostSpecifications;
@@ -28,8 +29,13 @@ public class BlogService {
 
     @Transactional(readOnly = true)
     public Page<BlogSummaryResponse> list(BlogListQuery query) {
-        return postRepository.findAll(PostSpecifications.hasStatus(PostStatus.PUBLISHED), query.toPageable())
-                .map(BlogSummaryResponse::of);
+        Page<Post> page = postRepository.findAll(PostSpecifications.hasStatus(PostStatus.PUBLISHED), query.toPageable());
+
+        if (page.hasContent()) {
+            postRepository.findWithRelationsByIdIn(page.map(Post::getId).getContent());
+        }
+
+        return page.map(BlogSummaryResponse::of);
     }
 
     @Transactional(readOnly = true)
