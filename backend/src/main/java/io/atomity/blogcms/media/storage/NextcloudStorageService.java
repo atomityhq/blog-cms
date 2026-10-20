@@ -225,6 +225,16 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
 
     @Override
     public void delete(String key) {
+        try {
+            deleteRequired(key);
+        } catch (ApiException ex) {
+            // Existing image cleanup remains best effort.
+            log.warn("Nextcloud cleanup failed for a stored file");
+        }
+    }
+
+    @Override
+    public void deleteRequired(String key) {
         String path = remotePath(key);
 
         try {
@@ -238,13 +248,12 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                         }
 
                         log.warn("Nextcloud deletion failed with HTTP status {}", status);
-                        return null;
+                        throw storageUnavailable();
                     });
         } catch (RestClientException ex) {
-            // Match the existing storage contract: deletion failures do not
-            // undo a database deletion. The remote file may need later cleanup.
             log.warn("Nextcloud deletion failed ({})",
                     ex.getClass().getSimpleName());
+            throw storageUnavailable();
         }
     }
 

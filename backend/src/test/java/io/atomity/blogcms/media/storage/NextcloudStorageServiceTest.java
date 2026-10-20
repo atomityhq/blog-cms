@@ -225,6 +225,27 @@ class NextcloudStorageServiceTest {
     }
 
     @Test
+    void requiredDeleteReportsFailureAndCanBeRetried() {
+        String path = DAV_ROOT + "/BlogCMS/markdown/test.md";
+        files.put(path, "# Test".getBytes(StandardCharsets.UTF_8));
+        deleteStatus = 500;
+
+        ApiException failure = assertThrows(ApiException.class, () -> storage.deleteRequired("markdown/test.md"));
+        assertEquals(503, failure.getStatus().value());
+        assertTrue(files.containsKey(path));
+
+        deleteStatus = 204;
+        storage.deleteRequired("markdown/test.md");
+        assertFalse(files.containsKey(path));
+    }
+
+    @Test
+    void requiredDeleteAcceptsAnAlreadyMissingRemoteFile() {
+        deleteStatus = 404;
+        assertDoesNotThrow(() -> storage.deleteRequired("markdown/missing.md"));
+    }
+
+    @Test
     void sendsBasicAuthentication() {
         storage.store("images/auth-test.png", new byte[] { 1 });
 

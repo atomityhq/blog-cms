@@ -52,7 +52,7 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
 | `GET/POST /authors`, `PUT/DELETE /authors/{id}` | Authors |
 | `GET/POST /tags`, `PUT/DELETE /tags/{id}` | Tags |
 | `GET/POST /media` (multipart `file`), `PATCH/DELETE /media/{id}`, `GET /media/{id}/file` | Image library |
-| `POST /markdown-sources` (multipart `file`), `GET /markdown-sources/{id}/file` | Original `.md` files imported into posts |
+| `POST /markdown-sources` (multipart `file`), `GET /markdown-sources/{id}/file`, `DELETE /markdown-sources/{id}` | Upload, download and delete original `.md` files |
 
 ### Business rules
 
@@ -72,6 +72,29 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
   or removing it, or deleting the post, deletes the file once no post uses it (a duplicate shares
   it); the post content stays.
 - Deleting an author or tag removes it from posts; the posts stay.
+
+### Markdown file deletion
+
+`DELETE /api/v1/markdown-sources/{id}` requires a session. It returns `204` for an
+unused source, `404` for an unknown source, or `409 SOURCE_IN_USE` while any saved
+post references it. Remove the attachment and save those posts first. The editor
+uses this endpoint immediately for an unsaved upload; removing a saved attachment
+continues to take effect when the post is saved.
+
+Deletion has three steps: mark the source as pending in PostgreSQL, delete the
+Nextcloud file, then remove its metadata. The network call runs outside a database
+transaction. A row lock serializes the first step against attaching the source to
+a post. Pending sources cannot be attached or downloaded.
+
+If Nextcloud fails, the endpoint returns `503 STORAGE_UNAVAILABLE` and keeps the
+pending row and storage key. Retry DELETE with the same id. A remote `404` counts
+as success, including when a prior request deleted the remote file but failed to
+remove its database row. The editor keeps the filename visible on failure so
+Remove can be retried. There is no automatic retry job in this change.
+
+Existing automatic cleanup on post replacement/removal is unchanged and remains
+best effort. Uploading a file and abandoning the editor without removing it also
+still needs a separate abandoned-upload cleanup policy.
 
 ## Backend layout
 

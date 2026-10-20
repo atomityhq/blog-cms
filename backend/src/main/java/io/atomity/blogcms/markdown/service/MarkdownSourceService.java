@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,15 +37,49 @@ public class MarkdownSourceService {
 
     private final MarkdownSourceRepository repository;
     private final StorageService storage;
+    private final TransactionTemplate transactions;
 
-    public MarkdownSourceService(MarkdownSourceRepository repository, StorageService storage) {
+    public MarkdownSourceService(MarkdownSourceRepository repository, StorageService storage,
+                                 PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.storage = storage;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     @Transactional(readOnly = true)
     public MarkdownSource get(UUID id) {
-        return repository.findById(id).orElseThrow(() -> ApiException.notFound("Markdown file"));
+        return repository.findById(id).filter(source -> !source.isDeletionPending())
+                .orElseThrow(() -> ApiException.notFound("Markdown file"));
+    }
+
+    /** The row lock stays held until the caller's post save commits. */
+    @Transactional
+    public MarkdownSource getForPost(UUID id) {
+        MarkdownSource source = repository.findForUpdate(id)
+                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
+        if (source.isDeletionPending()) {
+            throw ApiException.conflict("SOURCE_DELETION_PENDING", "This Markdown file is being deleted. Import it again.");
+        }
+        return source;
+    }
+
+    /**
+     * Reserve deletion in a short transaction, then contact Nextcloud without a DB
+     * connection. Keep the pending row on failure so retrying DELETE uses the same key.
+     */
+    public void delete(UUID id) {
+        String key = transactions.execute(status -> {
+            MarkdownSource source = repository.findForUpdate(id)
+                    .orElseThrow(() -> ApiException.notFound("Markdown file"));
+            if (repository.countUsages(id) > 0) {
+                throw ApiException.conflict("SOURCE_IN_USE", "Remove this Markdown file from its posts and save them first.");
+            }
+            source.markDeletionPending();
+            return source.getStorageKey();
+        });
+
+        storage.deleteRequired(key);
+        transactions.executeWithoutResult(status -> repository.deleteById(id));
     }
 
     /**
@@ -66,7 +102,6 @@ public class MarkdownSourceService {
     }
 
     /** Stores the file, then records it. The file is removed again if the database write fails. */
-    @Transactional
     public MarkdownSourceRef upload(MultipartFile file) {
         String name = Filenames.clean(file.getOriginalFilename(), "post.md");
         String lower = name.toLowerCase(Locale.ROOT);
@@ -94,18 +129,21 @@ public class MarkdownSourceService {
         String key = "markdown/%d/%02d/%s.md".formatted(now.getYear(), now.getMonthValue(), id);
 
         storage.store(key, bytes);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) {
-                    storage.delete(key);
-                }
+        try {
+            return transactions.execute(status -> {
+                MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
+                log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
+                return MarkdownSourceRef.of(source);
+            });
+        } catch (RuntimeException | Error failure) {
+            try {
+                storage.deleteRequired(key);
+            } catch (RuntimeException | Error cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+                log.warn("Could not clean up Markdown upload after a database failure");
             }
-        });
-
-        MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
-        log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
-        return MarkdownSourceRef.of(source);
+            throw failure;
+        }
     }
 
     /** Valid UTF-8 without NUL characters; anything else is a binary file with a .md name. */
