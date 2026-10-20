@@ -54,6 +54,7 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
 | `GET/POST /tags`, `PUT/DELETE /tags/{id}` | Tags |
 | `GET/POST /media` (multipart `file`), `PATCH/DELETE /media/{id}`, `GET /media/{id}/file` | Image library |
 | `GET /blogs?sort&direction&page&size`, `GET /blogs/{id}`, `GET /blogs/slug/{slug}` | Public, no token: published posts only, newest first by default; anything else is `404` |
+| `POST /markdown-sources` (multipart `file`), `GET /markdown-sources/{id}/file` | Original `.md` files imported into posts |
 
 ### Business rules
 
@@ -68,6 +69,10 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
 - Uploads are identified from their bytes (JPEG, PNG, WebP, GIF; ≤ 10 MB), never from the
   client's file name or Content-Type. An image used as a cover, inline, or as an avatar
   can't be deleted.
+- An imported `.md` file (`.md`/`.markdown`, UTF-8 text, ≤ 1 MB) is stored as is and linked to
+  its post through `markdownSourceId`, so the editor can show it again after a reload. Replacing
+  or removing it, or deleting the post, deletes the file once no post uses it (a duplicate shares
+  it); the post content stays.
 - Deleting an author or tag removes it from posts; the posts stay.
 
 ## Backend layout
@@ -82,7 +87,8 @@ io.atomity.blogcms
 ├── auth/              config/ (SecurityConfig, AuthProperties) controller/ dto/ service/
 ├── post/              controller/ dto/ entity/ repository/ service/ (ContentAnalyzer)
 ├── author/ tag/       controller/ dto/ entity/ repository/ service/
-└── media/             … plus storage/ (StorageService, local-disk implementation)
+├── media/             … plus storage/ (StorageService, local-disk implementation)
+└── markdown/          controller/ dto/ entity/ repository/ service/ (files stored via StorageService)
 ```
 
 Conventions: constructor injection, Java `record`s for DTOs, UUID primary
