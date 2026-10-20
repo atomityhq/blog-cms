@@ -86,7 +86,7 @@ Nextcloud file, then remove its metadata. The network call runs outside a databa
 transaction. A row lock serializes the first step against attaching the source to
 a post. Pending sources cannot be attached or downloaded.
 
-If Nextcloud fails, the endpoint returns `503 STORAGE_UNAVAILABLE` and keeps the
+If Nextcloud fails, the endpoint returns `503 MEDIA_STORAGE_UNAVAILABLE` and keeps the
 pending row and storage key. Retry DELETE with the same id. A remote `404` counts
 as success, including when a prior request deleted the remote file but failed to
 remove its database row. The editor keeps the filename visible on failure so

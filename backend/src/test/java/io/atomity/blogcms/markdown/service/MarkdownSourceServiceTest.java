@@ -58,7 +58,7 @@ class MarkdownSourceServiceTest {
 
     @Test
     void storageFailureKeepsPendingSourceAndRetryCompletesDeletion() {
-        ApiException unavailable = new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "STORAGE_UNAVAILABLE", "Try again");
+        ApiException unavailable = new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MEDIA_STORAGE_UNAVAILABLE", "Try again");
         doThrow(unavailable).doNothing().when(storage).deleteRequired(source.getStorageKey());
 
         assertThatThrownBy(() -> service.delete(source.getId())).isSameAs(unavailable);

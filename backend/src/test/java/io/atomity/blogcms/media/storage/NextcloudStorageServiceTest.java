@@ -246,6 +246,30 @@ class NextcloudStorageServiceTest {
     }
 
     @Test
+    void requiredDeleteMapsTimeoutToStorageUnavailableAndCanBeRetried() {
+        storage.close();
+        storage = new NextcloudStorageService(
+                new StorageProperties("http://localhost:" + server.getAddress().getPort(),
+                        "test-user", "test-password", "/BlogCMS"),
+                Duration.ofSeconds(60), Duration.ofSeconds(2), Duration.ofMillis(200));
+        String path = DAV_ROOT + "/BlogCMS/markdown/stalled.md";
+        files.put(path, new byte[] { 1, 2, 3 });
+        deleteStatus = -1;
+
+        ApiException failure = assertThrows(ApiException.class,
+                () -> storage.deleteRequired("markdown/stalled.md"));
+        assertEquals(503, failure.getStatus().value());
+        assertEquals("MEDIA_STORAGE_UNAVAILABLE", failure.getErrorCode());
+        assertTrue(files.containsKey(path));
+
+        // Best-effort cleanup also absorbs timeouts.
+        assertDoesNotThrow(() -> storage.delete("markdown/stalled.md"));
+        deleteStatus = 204;
+        storage.deleteRequired("markdown/stalled.md");
+        assertFalse(files.containsKey(path));
+    }
+
+    @Test
     void sendsBasicAuthentication() {
         storage.store("images/auth-test.png", new byte[] { 1 });
 
@@ -652,6 +676,15 @@ class NextcloudStorageServiceTest {
             }
 
             case "DELETE" -> {
+                if (deleteStatus < 0) {
+                    try {
+                        Thread.sleep(2_000);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                    respond(exchange, 500);
+                    return;
+                }
                 if (deleteStatus >= 200 && deleteStatus < 300) {
                     files.remove(path);
                 }

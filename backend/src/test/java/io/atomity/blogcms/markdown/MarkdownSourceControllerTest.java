@@ -45,11 +45,11 @@ class MarkdownSourceControllerTest {
 
     @Test
     void storageFailureReturnsServiceUnavailable() throws Exception {
-        doThrow(new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "STORAGE_UNAVAILABLE", "Try again"))
+        doThrow(new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MEDIA_STORAGE_UNAVAILABLE", "Try again"))
                 .when(service).delete(id);
         mvc.perform(delete("/api/v1/markdown-sources/" + id))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.errors[0].errorCode").value("STORAGE_UNAVAILABLE"));
+                .andExpect(jsonPath("$.errors[0].errorCode").value("MEDIA_STORAGE_UNAVAILABLE"));
     }
 
     @Test

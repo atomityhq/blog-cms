@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -169,7 +170,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
 
             published = true;
             return PublishResult.PUBLISHED;
-        } catch (RestClientException ex) {
+        } catch (RestClientException | CancellationException ex) {
             log.warn("Nextcloud upload failed ({})",
                     ex.getClass().getSimpleName());
             return PublishResult.FAILED;
@@ -250,7 +251,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                         log.warn("Nextcloud deletion failed with HTTP status {}", status);
                         throw storageUnavailable();
                     });
-        } catch (RestClientException ex) {
+        } catch (RestClientException | CancellationException ex) {
             log.warn("Nextcloud deletion failed ({})",
                     ex.getClass().getSimpleName());
             throw storageUnavailable();
@@ -308,7 +309,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                                         response.getStatusCode().value());
                                 throw storageUnavailable();
                             });
-                } catch (RestClientException ex) {
+                } catch (RestClientException | CancellationException ex) {
                     log.warn(
                             "Nextcloud directory creation failed ({})",
                             ex.getClass().getSimpleName());
@@ -326,7 +327,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                     .uri(remoteUri(path))
                     .header("Depth", "0")
                     .exchange((request, response) -> response.getStatusCode().is2xxSuccessful());
-        } catch (RestClientException ex) {
+        } catch (RestClientException | CancellationException ex) {
             log.warn("Nextcloud directory verification failed ({})",
                     ex.getClass().getSimpleName());
             return false;
