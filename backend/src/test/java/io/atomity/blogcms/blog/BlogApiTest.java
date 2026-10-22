@@ -17,9 +17,24 @@ class BlogApiTest extends IntegrationTest {
     // ── Builders ───────────────────────────────────────────────────────────
 
     private String createPost(String title) throws Exception {
+        return createPost(title, List.of(), List.of());
+    }
+
+    private String createPost(String title, List<String> authorIds, List<String> tagIds) throws Exception {
         Map<String, Object> content = Map.of("type", "doc", "content", List.of(
                 Map.of("type", "paragraph", "content", List.of(Map.of("type", "text", "text", "Some words.")))));
-        return data(call(post("/api/v1/posts"), Map.of("title", title, "content", content))
+        return data(call(post("/api/v1/posts"), Map.of("title", title, "content", content,
+                "authorIds", authorIds, "tagIds", tagIds))
+                .andExpect(status().isCreated())).path("id").asText();
+    }
+
+    private String createAuthor(String name) throws Exception {
+        return data(call(post("/api/v1/authors"), Map.of("name", name))
+                .andExpect(status().isCreated())).path("id").asText();
+    }
+
+    private String createTag(String name) throws Exception {
+        return data(call(post("/api/v1/tags"), Map.of("name", name))
                 .andExpect(status().isCreated())).path("id").asText();
     }
 
@@ -102,6 +117,34 @@ class BlogApiTest extends IntegrationTest {
                     .andExpect(jsonPath("$.data.focusKeyword").doesNotExist());
         }
 
+    }
+
+    /** Authors keep their byline order and tags come sorted by name, in the list and on the post. */
+    @Test
+    void postsIncludeTheirAuthorsAndTags() throws Exception {
+        String id = createPost("With people", List.of(createAuthor("Linus"), createAuthor("Ada")),
+                List.of(createTag("Spring"), createTag("Java")));
+        call(post("/api/v1/posts/" + id + "/publish")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].authors.length()").value(2))
+                .andExpect(jsonPath("$.data[0].authors[0].name").value("Linus"))
+                .andExpect(jsonPath("$.data[0].authors[1].name").value("Ada"))
+                .andExpect(jsonPath("$.data[0].tags.length()").value(2))
+                .andExpect(jsonPath("$.data[0].tags[0].name").value("Java"))
+                .andExpect(jsonPath("$.data[0].tags[1].name").value("Spring"));
+
+        for (String path : List.of("/api/v1/blogs/" + id, "/api/v1/blogs/slug/with-people")) {
+            mockMvc.perform(get(path))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.authors.length()").value(2))
+                .andExpect(jsonPath("$.data.authors[0].name").value("Linus"))
+                .andExpect(jsonPath("$.data.authors[1].name").value("Ada"))
+                .andExpect(jsonPath("$.data.tags.length()").value(2))
+                .andExpect(jsonPath("$.data.tags[0].name").value("Java"))
+                .andExpect(jsonPath("$.data.tags[1].name").value("Spring"));
+        }
     }
 
     /**

@@ -20,10 +20,13 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
 
     boolean existsBySlugAndIdNot(String slug, UUID id);
 
+    @EntityGraph(attributePaths = {"authors", "authors.avatar", "tags", "coverImage"})
     Optional<Post> findByIdAndStatus(UUID id, PostStatus status);
 
+    @EntityGraph(attributePaths = {"authors", "authors.avatar", "tags", "coverImage"})
     Optional<Post> findBySlugAndStatus(String slug, PostStatus status);
 
+    /** Loads the given posts with their authors (and avatars), tags and cover image in one query. */
     @EntityGraph(attributePaths = {"authors", "authors.avatar", "tags", "coverImage"})
     List<Post> findWithRelationsByIdIn(Collection<UUID> ids);
 

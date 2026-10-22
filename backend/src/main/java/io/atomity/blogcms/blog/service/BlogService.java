@@ -31,6 +31,9 @@ public class BlogService {
     public Page<BlogSummaryResponse> list(BlogListQuery query) {
         Page<Post> page = postRepository.findAll(PostSpecifications.hasStatus(PostStatus.PUBLISHED), query.toPageable());
 
+        // Not unused: fills authors, tags and covers into the posts above (same transaction), so the
+        // mapping below runs no query per post. Fetching them in the paged query would make
+        // Hibernate paginate in memory.
         if (page.hasContent()) {
             postRepository.findWithRelationsByIdIn(page.map(Post::getId).getContent());
         }
