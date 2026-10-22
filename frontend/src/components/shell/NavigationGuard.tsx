@@ -33,6 +33,7 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
   const pendingDeltaRef = useRef<number | null>(null);
   const pendingHrefRef = useRef<string | null>(null);
   const pendingPopstateRef = useRef<{ delta: number } | null>(null);
+  const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     pendingHrefRef.current = pendingHref;
@@ -78,6 +79,10 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
         // This popstate was triggered by our own history.go() restoration.
         event.stopImmediatePropagation();
         isRestoringRef.current = false;
+        if (restoreTimerRef.current) {
+          clearTimeout(restoreTimerRef.current);
+          restoreTimerRef.current = null;
+        }
         if (pendingDeltaRef.current !== null) {
           setPendingPopstate({ delta: pendingDeltaRef.current });
           pendingDeltaRef.current = null;
@@ -87,6 +92,8 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
 
       const targetIdx = (event.state as Record<string, unknown> | null)?.__navIdx;
       const delta = typeof targetIdx === "number" ? targetIdx - currentIdxRef.current : -1;
+
+      if (delta === 0) return;
 
       if (blocked.current) {
         event.stopImmediatePropagation();
@@ -103,15 +110,15 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
         window.history.go(-delta);
 
         // Fallback for environments where history.go doesn't dispatch a popstate event.
-        const timer = setTimeout(() => {
+        if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
+        restoreTimerRef.current = setTimeout(() => {
           if (isRestoringRef.current && pendingDeltaRef.current !== null) {
             isRestoringRef.current = false;
             setPendingPopstate({ delta: pendingDeltaRef.current });
             pendingDeltaRef.current = null;
           }
         }, 80);
-
-        return () => clearTimeout(timer);
+        return;
       }
 
       if (typeof targetIdx === "number") {
@@ -122,6 +129,9 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
     window.addEventListener("popstate", onPopState, true);
 
     return () => {
+      if (restoreTimerRef.current) {
+        clearTimeout(restoreTimerRef.current);
+      }
       window.history.pushState = origPushState;
       window.history.replaceState = origReplaceState;
       window.removeEventListener("popstate", onPopState, true);
