@@ -17,7 +17,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -201,4 +200,13 @@ call(post("/api/v1/posts"), postBody("Using Markdown", sourceId))
             .andExpect(status().isOk())
             .andExpect(content().bytes(MARKDOWN));
 }
+    @Test
+    void deletingNonexistentMarkdownReturnsNotFound() throws Exception {
+        UUID nonexistentId = UUID.randomUUID();
+
+        call(delete("/api/v1/markdown-sources/" + nonexistentId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errors[0].errorCode")
+                        .value("NOT_FOUND"));
+    }
 }
