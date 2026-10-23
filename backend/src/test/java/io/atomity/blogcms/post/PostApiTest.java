@@ -225,6 +225,20 @@ class PostApiTest extends IntegrationTest {
 
         call(get("/api/v1/posts?sort=password")).andExpect(status().isBadRequest());
         call(get("/api/v1/posts?status=BOGUS")).andExpect(status().isBadRequest());
+
+        // Invalid query parameters should return clean messages.
+        call(get("/api/v1/posts?status=BOGUS"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errors[0].errorCode").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.errors[0].message").value("Invalid value for 'status'"));
+
+        call(get("/api/v1/posts?author=invalid-uuid"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errors[0].message").value("Invalid value for 'author'"));
+
+        call(get("/api/v1/posts?size=invalid-number"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errors[0].message").value("Invalid value for 'size'"));
     }
 
     @Test
