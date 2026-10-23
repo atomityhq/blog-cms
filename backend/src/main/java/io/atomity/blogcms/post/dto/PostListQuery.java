@@ -15,6 +15,7 @@ public record PostListQuery(
         String q,
         UUID tag,
         UUID author,
+        Boolean featured,
         String sort,
         String direction,
         Integer page,

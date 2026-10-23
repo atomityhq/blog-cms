@@ -226,6 +226,41 @@ class PostApiTest extends IntegrationTest {
         call(get("/api/v1/posts?sort=password")).andExpect(status().isBadRequest());
         call(get("/api/v1/posts?status=BOGUS")).andExpect(status().isBadRequest());
     }
+    
+    @Test
+    void listFiltersByFeatured() throws Exception {
+        Map<String, Object> featuredBody = postBody("Featured draft", doc("Pinned post."));
+        featuredBody.put("featured", true);
+        call(post("/api/v1/posts"), featuredBody).andExpect(status().isCreated());
+
+        Map<String, Object> featuredPublishedBody = postBody("Featured published", doc("Pinned and live."));
+        featuredPublishedBody.put("featured", true);
+        String id = data(call(post("/api/v1/posts"), featuredPublishedBody)).path("id").asText();
+        call(post("/api/v1/posts/" + id + "/publish")).andExpect(status().isOk());
+
+        createPost("Regular post", "Nothing special.");
+
+        // featured=true returns only featured posts.
+        call(get("/api/v1/posts?featured=true"))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[*].featured").value(org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is(true))));
+
+        // featured=false returns only non-featured posts.
+        call(get("/api/v1/posts?featured=false"))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("Regular post"));
+
+        // Omitted: no filtering.
+        call(get("/api/v1/posts")).andExpect(jsonPath("$.data.length()").value(3));
+
+        // Combines with other filters.
+        call(get("/api/v1/posts?featured=true&status=PUBLISHED"))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("Featured published"));
+
+        // Invalid value is rejected.
+        call(get("/api/v1/posts?featured=maybe")).andExpect(status().isBadRequest());
+    }
 
     @Test
     void countsCoverEveryStatus() throws Exception {

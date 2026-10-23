@@ -48,4 +48,8 @@ public final class PostSpecifications {
     static String escapeLike(String value) {
         return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
+
+        public static Specification<Post> isFeatured(Boolean featured) {
+        return featured == null ? null : (root, query, cb) -> cb.equal(root.get("featured"), featured);
+    }
 }
