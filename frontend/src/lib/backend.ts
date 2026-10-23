@@ -24,13 +24,10 @@ export function backendBaseUrl(): string {
  */
 export function forwardingHeaders(request: NextRequest): Headers {
   const headers = new Headers();
-  const forwardedFor = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip");
-  if (forwardedFor) headers.set("X-Forwarded-For", forwardedFor);
   const correlationId = request.headers.get("x-correlation-id");
   if (correlationId) headers.set("X-Correlation-ID", correlationId);
   return headers;
 }
-
 /** The error envelope, for failures that happen here rather than in the backend. */
 export function errorBody(errorCode: string, message: string) {
   return { errors: [{ errorCode, message }] };

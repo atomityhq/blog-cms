@@ -53,7 +53,10 @@ public abstract class IntegrationTest {
     protected String token() throws Exception {
         if (token == null) {
             String body = mockMvc.perform(post("/api/v1/auth/login")
-                            .header("X-Forwarded-For", "token-helper")
+                            .with(request -> {
+    request.setRemoteAddr("192.0.2.10");
+    return request;
+})
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of("email", ADMIN_EMAIL, "password", ADMIN_PASSWORD))))
                     .andExpect(status().isOk())

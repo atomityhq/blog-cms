@@ -64,7 +64,10 @@ class AuthApiTest extends IntegrationTest {
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder login(
             String email, String password, String client) throws Exception {
         return post("/api/v1/auth/login")
-                .header("X-Forwarded-For", client)
+                .with(request -> {
+                    request.setRemoteAddr(client);
+                    return request;
+                })
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("email", email, "password", password)));
     }
