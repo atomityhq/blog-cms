@@ -113,6 +113,22 @@ public class PostService {
         }
         MarkdownSource previousSource = post.getMarkdownSource();
         post.edit(resolveEdit(request, id));
+
+        // A live post must keep a title and content — the same rule publish() enforces.
+        if (post.getStatus() == PostStatus.PUBLISHED) {
+            List<String> missing = new ArrayList<>();
+            if (post.getTitle().isBlank()) {
+                missing.add("a title");
+            }
+            if (post.hasNoContent()) {
+                missing.add("some content");
+            }
+            if (!missing.isEmpty()) {
+                throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "NOT_PUBLISHABLE",
+                        "A published post needs " + String.join(" and ", missing) + ". Remove it or unpublish first.");
+            }
+        }
+
         // Flush so the response carries the incremented version.
         PostResponse response = PostResponse.of(postRepository.saveAndFlush(post));
         // A replaced or removed .md file is deleted once nothing else uses it.
