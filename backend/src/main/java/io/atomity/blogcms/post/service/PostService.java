@@ -111,8 +111,30 @@ public class PostService {
             throw ApiException.conflict("VERSION_CONFLICT",
                     "This post was changed somewhere else since you opened it. Reload to get the latest version.");
         }
+        PostEdit edit = resolveEdit(request, id);
+
+        if (post.getStatus() == PostStatus.PUBLISHED) {
+            List<String> missing = new ArrayList<>();
+
+            if (edit.title().isBlank()) {
+                missing.add("a title");
+            }
+
+            if (edit.wordCount() == 0 && edit.inlineImages().isEmpty()) {
+                missing.add("some content");
+            }
+
+            if (!missing.isEmpty()) {
+                throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOT_PUBLISHABLE",
+                    "Add " + String.join(" and ", missing) + " before publishing."
+                );
+            }
+        }
+
         MarkdownSource previousSource = post.getMarkdownSource();
-        post.edit(resolveEdit(request, id));
+        post.edit(edit);
         // Flush so the response carries the incremented version.
         PostResponse response = PostResponse.of(postRepository.saveAndFlush(post));
         // A replaced or removed .md file is deleted once nothing else uses it.

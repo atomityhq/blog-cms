@@ -147,6 +147,91 @@ class PostApiTest extends IntegrationTest {
         call(put("/api/v1/posts/" + id), edit).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void publishedPostCannotBeUpdatedWithEmptyTitle() throws Exception {
+        JsonNode created = createPost("Published post", "Some readable content.");
+        String id = created.path("id").asText();
+
+        JsonNode published = data(
+            call(post("/api/v1/posts/" + id + "/publish"))
+                .andExpect(status().isOk())
+        );
+
+        Map<String, Object> edit = postBody("", doc("Some readable content."));
+        edit.put("slug", published.path("slug").asText());
+        edit.put("version", published.path("version").asLong());
+
+        call(put("/api/v1/posts/" + id), edit)
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.errors[0].errorCode").value("NOT_PUBLISHABLE"));
+
+        JsonNode unchanged = data(
+            call(get("/api/v1/posts/" + id))
+                .andExpect(status().isOk())
+        );
+
+        assertThat(unchanged.path("title").asText()).isEqualTo("Published post");
+        assertThat(unchanged.path("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(unchanged.path("version").asLong())
+            .isEqualTo(published.path("version").asLong());
+    }
+
+    @Test
+    void publishedPostCannotBeUpdatedWithEmptyContent() throws Exception {
+        JsonNode created = createPost("Published post", "Some readable content.");
+        String id = created.path("id").asText();
+
+        JsonNode published = data(
+            call(post("/api/v1/posts/" + id + "/publish"))
+                .andExpect(status().isOk())
+        );
+
+        Map<String, Object> emptyContent = Map.of(
+            "type", "doc",
+            "content", List.of(Map.of("type", "paragraph"))
+        );
+
+        Map<String, Object> edit = postBody("Published post", emptyContent);
+        edit.put("slug", published.path("slug").asText());
+        edit.put("version", published.path("version").asLong());
+
+        call(put("/api/v1/posts/" + id), edit)
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.errors[0].errorCode").value("NOT_PUBLISHABLE"));
+
+        JsonNode unchanged = data(
+            call(get("/api/v1/posts/" + id))
+                .andExpect(status().isOk())
+        );
+
+        assertThat(unchanged.path("wordCount").asInt()).isGreaterThan(0);
+        assertThat(unchanged.path("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(unchanged.path("version").asLong())
+            .isEqualTo(published.path("version").asLong());
+    }
+
+    @Test
+    void draftCanStillBeUpdatedWithEmptyTitleAndContent() throws Exception {
+        JsonNode created = createPost("Draft post", "Some content.");
+        String id = created.path("id").asText();
+
+        Map<String, Object> emptyContent = Map.of(
+            "type", "doc",
+            "content", List.of(Map.of("type", "paragraph"))
+        );
+
+        Map<String, Object> edit = postBody("", emptyContent);
+        edit.put("slug", created.path("slug").asText());
+        edit.put("version", created.path("version").asLong());
+
+        JsonNode updated = data(
+            call(put("/api/v1/posts/" + id), edit)
+                .andExpect(status().isOk())
+        );
+
+        assertThat(updated.path("title").asText()).isEmpty();
+        assertThat(updated.path("status").asText()).isEqualTo("DRAFT");
+    }
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
     @Test
