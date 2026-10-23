@@ -1,3 +1,15 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        # Read by BlogQueryCountTest. Set here, not per-class, so every test shares one Spring context.
+        generate_statistics: true
+
+logging:
+  level:
+    # Statistics stay on for the query-budget test, but skip the per-session metrics dump at INFO.
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: WARN
+
 blogcms:
   admin:
     email: admin@test.local

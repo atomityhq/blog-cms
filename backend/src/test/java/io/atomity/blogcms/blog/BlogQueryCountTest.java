@@ -7,7 +7,6 @@ import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.TestPropertySource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,7 +23,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Guards the blog list's fetch strategy: authors and tags are loaded in batched IN queries,
  * not one query per post. The budget grows with configuration, not with the number of posts.
  */
-@TestPropertySource(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 class BlogQueryCountTest extends IntegrationTest {
 
     @Autowired
