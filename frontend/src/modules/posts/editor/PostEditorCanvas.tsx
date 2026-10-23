@@ -20,6 +20,7 @@ import { slugify } from "@/lib/slug";
 import { ApiError } from "@/types/api";
 import { POST_LIMITS, type Post } from "@/types/post";
 import { archivePost, createPost, deletePost, duplicatePost, getPost, publishPost, unpublishPost, updatePost } from "../api";
+import { areValuesEqual } from "./editor-form-utils";
 import { EditorSidebar, type EditorMeta } from "./EditorSidebar";
 import { EMPTY_FORM, formFromPost, inputFromForm, validateForm, type EditorForm } from "./form";
 import { RichTextEditor } from "./RichTextEditor";
@@ -62,7 +63,9 @@ function PostEditor({ initial }: { initial: Post | null }) {
 
   const initialForm = initial ? formFromPost(initial) : EMPTY_FORM;
   const [form, setForm] = useState<EditorForm>(initialForm);
-  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(initialForm));
+  // Keep an independent copy: JSONB can reorder object keys, and the form must not
+  // share mutable objects with the baseline it is compared against.
+  const [savedSnapshot, setSavedSnapshot] = useState<EditorForm>(() => structuredClone(initialForm));
   const [post, setPost] = useState<Post | null>(initial);
   const [busy, setBusy] = useState<Busy>(null);
   const [showErrors, setShowErrors] = useState(false);
@@ -73,7 +76,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
   // already have their own slug, where changing the title must not move the URL.
   const slugFollowsTitle = useRef(!initial || (initial.status === "DRAFT" && initial.slug === slugify(initial.title)));
 
-  const dirty = JSON.stringify(form) !== savedSnapshot;
+  const dirty = !areValuesEqual(form, savedSnapshot);
   // A Markdown import still uploading counts as unsaved: leaving now would lose it.
   useUnsavedChangesWarning(dirty || importing);
   useBlockNavigation(dirty || importing);
@@ -127,7 +130,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
       // The server may have filled in a slug; keep the form in step so it isn't dirty.
       const nextForm = { ...form, slug: saved.slug };
       setForm(nextForm);
-      setSavedSnapshot(JSON.stringify(nextForm));
+      setSavedSnapshot(structuredClone(nextForm));
       setShowErrors(false);
       if (!options.quiet) toast.success(post ? "Changes saved." : "Draft created.");
       if (!post) router.replace(`/posts/${saved.id}`);
@@ -333,7 +336,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
               reportError(error);
               throw error;
             }
-            setSavedSnapshot(JSON.stringify(form));
+            setSavedSnapshot(structuredClone(form));
             toast.success("Post deleted.");
             router.push("/posts");
           }}
