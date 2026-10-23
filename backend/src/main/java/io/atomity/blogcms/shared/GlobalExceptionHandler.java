@@ -59,7 +59,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Object>> handleValidation(MethodArgumentNotValidException ex) {
-        String detail = ex.getBindingResult().getFieldErrors().stream()
+        var errors = ex.getBindingResult().getFieldErrors();
+        // Query params bound to an object (e.g. ?status=BOGUS): same clean format as handleBind
+        if (errors.stream().anyMatch(error -> error.isBindingFailure())) {
+            String bindingDetail = errors.stream()
+                    .filter(error -> error.isBindingFailure())
+                    .map(error -> "Invalid value for '" + error.getField() + "'")
+                    .collect(Collectors.joining("; "));
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(apiError("BAD_REQUEST", bindingDetail)));
+        }
+        String detail = errors.stream()
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest()

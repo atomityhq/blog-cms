@@ -228,6 +228,30 @@ class PostApiTest extends IntegrationTest {
     }
 
     @Test
+    void invalidQueryParamsReturnACleanBadRequest() throws Exception {
+        assertCleanBadRequest("status=BOGUS", "status");
+        assertCleanBadRequest("author=not-a-uuid", "author");
+        assertCleanBadRequest("size=abc", "size");
+    }
+
+    @Test
+    void severalInvalidQueryParamsAreReportedWithoutJavaInternals() throws Exception {
+        String body = call(get("/api/v1/posts?status=BOGUS&size=abc"))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).contains("'status'").contains("'size'")
+                .doesNotContain("java.").doesNotContain("io.atomity");
+    }
+
+    private void assertCleanBadRequest(String query, String field) throws Exception {
+        call(get("/api/v1/posts?" + query))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.errors[0].message").value("Invalid value for '" + field + "'"));
+    }
+    
+    @Test
     void countsCoverEveryStatus() throws Exception {
         createPost("Draft one", "x");
         String id = createPost("Published one", "y").path("id").asText();
