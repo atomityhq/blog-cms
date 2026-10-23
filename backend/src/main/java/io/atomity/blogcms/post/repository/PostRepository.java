@@ -16,6 +16,8 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
 
     boolean existsBySlugAndIdNot(String slug, UUID id);
 
+    
+
     @Query("SELECT p.status AS status, COUNT(p) AS count FROM Post p GROUP BY p.status")
     List<StatusCount> countByStatus();
 

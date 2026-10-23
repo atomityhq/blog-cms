@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -38,6 +39,11 @@ public class MarkdownSourceController {
     public ResponseEntity<ApiResponse<MarkdownSourceRef>> upload(@RequestParam("file") MultipartFile file) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(service.upload(file)));
     }
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+}
 
     /** Downloads the original file. Unlike images this stays behind the login. */
     @GetMapping("/{id}/file")

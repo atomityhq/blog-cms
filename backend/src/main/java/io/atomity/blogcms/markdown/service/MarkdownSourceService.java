@@ -1,3 +1,4 @@
+
 package io.atomity.blogcms.markdown.service;
 
 import io.atomity.blogcms.markdown.dto.MarkdownSourceRef;
@@ -36,79 +37,153 @@ public class MarkdownSourceService {
     private final MarkdownSourceRepository repository;
     private final StorageService storage;
 
-    public MarkdownSourceService(MarkdownSourceRepository repository, StorageService storage) {
+    public MarkdownSourceService(
+            MarkdownSourceRepository repository,
+            StorageService storage) {
         this.repository = repository;
         this.storage = storage;
     }
 
     @Transactional(readOnly = true)
     public MarkdownSource get(UUID id) {
-        return repository.findById(id).orElseThrow(() -> ApiException.notFound("Markdown file"));
+        return repository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Markdown file"));
     }
 
     /**
-     * Deletes the row and, once that commits, the stored file, as long as no post still
-     * uses it (a duplicated post shares its source). Call after the post change is flushed.
+     * Deletes a Markdown source only when no posts reference it.
+     * Locks the row to protect against concurrent references.
+     * Deletes the stored file only after the transaction commits.
+     */
+    @Transactional
+    public void delete(UUID id) {
+        MarkdownSource source = repository.findByIdForUpdate(id)
+                .orElseThrow(() -> ApiException.notFound("Markdown file"));
+
+        long usages = repository.countUsages(id);
+
+        if (usages > 0) {
+            throw ApiException.conflict(
+                    "MARKDOWN_IN_USE",
+                    "This Markdown file is used by %d post(s). Remove its references first."
+                            .formatted(usages));
+        }
+
+        repository.delete(source);
+
+        String key = source.getStorageKey();
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        storage.delete(key);
+                    }
+                });
+    }
+
+    /**
+     * Deletes the row and, once that commits, the stored file,
+     * as long as no post still uses it.
+     * A duplicated post shares its source.
+     * Call after the post change is flushed.
      */
     @Transactional
     public void deleteIfUnused(MarkdownSource source) {
         if (source == null || repository.countUsages(source.getId()) > 0) {
             return;
         }
+
         repository.delete(source);
+
         String key = source.getStorageKey();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                storage.delete(key);
-            }
-        });
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        storage.delete(key);
+                    }
+                });
     }
 
-    /** Stores the file, then records it. The file is removed again if the database write fails. */
+    /**
+     * Stores the file, then records it.
+     * The file is removed again if the database write fails.
+     */
     @Transactional
     public MarkdownSourceRef upload(MultipartFile file) {
         String name = Filenames.clean(file.getOriginalFilename(), "post.md");
         String lower = name.toLowerCase(Locale.ROOT);
+
         if (!lower.endsWith(".md") && !lower.endsWith(".markdown")) {
-            throw new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_TYPE", "Only .md and .markdown files are supported");
+            throw new ApiException(
+                    HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "UNSUPPORTED_TYPE",
+                    "Only .md and .markdown files are supported");
         }
+
         if (file.isEmpty()) {
             throw ApiException.badRequest("EMPTY_FILE", "The file is empty");
         }
+
         if (file.getSize() > MAX_BYTES) {
-            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "Markdown files must be 1 MB or smaller");
+            throw new ApiException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "FILE_TOO_LARGE",
+                    "Markdown files must be 1 MB or smaller");
         }
+
         byte[] bytes;
+
         try {
             bytes = file.getBytes();
         } catch (IOException e) {
-            throw ApiException.badRequest("READ_FAILED", "Could not read the uploaded file");
+            throw ApiException.badRequest(
+                    "READ_FAILED",
+                    "Could not read the uploaded file");
         }
+
         if (!isText(bytes)) {
-            throw new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_TYPE", "The file is not a readable text file");
+            throw new ApiException(
+                    HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "UNSUPPORTED_TYPE",
+                    "The file is not a readable text file");
         }
 
         UUID id = UUID.randomUUID();
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        String key = "markdown/%d/%02d/%s.md".formatted(now.getYear(), now.getMonthValue(), id);
+
+        String key = "markdown/%d/%02d/%s.md"
+                .formatted(now.getYear(), now.getMonthValue(), id);
 
         storage.store(key, bytes);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) {
-                    storage.delete(key);
-                }
-            }
-        });
 
-        MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
-        log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status != STATUS_COMMITTED) {
+                            storage.delete(key);
+                        }
+                    }
+                });
+
+        MarkdownSource source = repository.save(
+                MarkdownSource.create(id, key, name, bytes.length));
+
+        log.info(
+                "Stored markdown file {} ({} bytes)",
+                source.getId(),
+                bytes.length);
+
         return MarkdownSourceRef.of(source);
     }
 
-    /** Valid UTF-8 without NUL characters; anything else is a binary file with a .md name. */
+    /**
+     * Valid UTF-8 without NUL characters.
+     * Anything else is a binary file with a .md name.
+     */
     static boolean isText(byte[] bytes) {
         try {
             String text = StandardCharsets.UTF_8.newDecoder()
@@ -116,7 +191,9 @@ public class MarkdownSourceService {
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(bytes))
                     .toString();
+
             return text.indexOf('\0') < 0;
+
         } catch (CharacterCodingException e) {
             return false;
         }
