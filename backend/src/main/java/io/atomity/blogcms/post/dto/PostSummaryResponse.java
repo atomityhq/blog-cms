@@ -49,15 +49,16 @@ public record PostSummaryResponse(
     }
 
     public static List<AuthorRef> authorRefs(Post post) {
-    return post.getAuthors().stream()
-            .map(AuthorRef::of)
-            .toList();
-}
+        return post.getAuthors().stream().map(AuthorRef::of).toList();
+    }
 
+    /**
+     * Tags are a set; sort by name so responses are stable.
+     */
     public static List<TagRef> tagRefs(Post post) {
         return post.getTags().stream()
-                .sorted(Comparator.comparing(tag -> tag.getName()))
                 .map(TagRef::of)
+                .sorted(Comparator.comparing(TagRef::name))
                 .toList();
     }
 }

@@ -10,9 +10,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -35,10 +37,15 @@ public class MarkdownSourceService {
 
     private final MarkdownSourceRepository repository;
     private final StorageService storage;
+    private final TransactionTemplate transactionTemplate;
 
-    public MarkdownSourceService(MarkdownSourceRepository repository, StorageService storage) {
+    public MarkdownSourceService(
+            MarkdownSourceRepository repository,
+            StorageService storage,
+            PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.storage = storage;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Transactional(readOnly = true)
@@ -65,8 +72,11 @@ public class MarkdownSourceService {
         });
     }
 
-    /** Stores the file, then records it. The file is removed again if the database write fails. */
-    @Transactional
+    /**
+     * Stores the file, then records it. WebDAV runs outside a database
+     * transaction so a slow Nextcloud call cannot hold a pool connection.
+     * If the database write fails the file is removed again.
+     */
     public MarkdownSourceRef upload(MultipartFile file) {
         String name = Filenames.clean(file.getOriginalFilename(), "post.md");
         String lower = name.toLowerCase(Locale.ROOT);
@@ -94,18 +104,25 @@ public class MarkdownSourceService {
         String key = "markdown/%d/%02d/%s.md".formatted(now.getYear(), now.getMonthValue(), id);
 
         storage.store(key, bytes);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) {
-                    storage.delete(key);
-                }
+        try {
+            MarkdownSourceRef recorded = transactionTemplate.execute(status -> {
+                MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
+                log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
+                return MarkdownSourceRef.of(source);
+            });
+            if (recorded == null) {
+                throw new IllegalStateException("Markdown record was not saved");
             }
-        });
-
-        MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
-        log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
-        return MarkdownSourceRef.of(source);
+            return recorded;
+        } catch (RuntimeException | Error ex) {
+            try {
+                storage.delete(key);
+            } catch (RuntimeException | Error cleanupException) {
+                log.warn("Failed to delete stored file {} after a database error", key, cleanupException);
+                ex.addSuppressed(cleanupException);
+            }
+            throw ex;
+        }
     }
 
     /** Valid UTF-8 without NUL characters; anything else is a binary file with a .md name. */
