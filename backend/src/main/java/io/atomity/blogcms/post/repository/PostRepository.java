@@ -27,6 +27,10 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
     @Query("SELECT p.status AS status, COUNT(p) AS count FROM Post p GROUP BY p.status")
     List<StatusCount> countByStatus();
 
+    Optional<Post> findByIdAndStatus(UUID id, PostStatus status);
+
+    Optional<Post> findBySlugAndStatus(String slug, PostStatus status);
+
     interface StatusCount {
         io.atomity.blogcms.post.entity.PostStatus getStatus();
         Long getCount();
