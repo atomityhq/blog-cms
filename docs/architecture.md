@@ -130,6 +130,8 @@ full backend build against PostgreSQL Testcontainers and the frontend lint, type
 tests, and production build. It also repeats the two database race suites three
 times with fresh test executions. Race tests use latches and observed PostgreSQL
 lock waits to establish ordering; timeouts fail rather than silently skip a case.
+The job summary records complete backend test counts, and the uploaded artifact
+preserves the full-suite XML before race repeats replace the current reports.
 These automated tests do not replace a manual walkthrough against live Nextcloud.
 
 ## Backend layout

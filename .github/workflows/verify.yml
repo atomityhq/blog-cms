@@ -30,6 +30,26 @@ jobs:
       - name: Build and run the full backend suite
         working-directory: backend
         run: ./gradlew build --no-daemon
+      - name: Record full-suite results before repeating races
+        working-directory: backend
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import shutil
+          import xml.etree.ElementTree as ET
+          results = Path('build/test-results/test')
+          reports = [ET.parse(path).getroot() for path in results.glob('TEST-*.xml')]
+          if not reports:
+              raise SystemExit('No backend test reports were produced')
+          counts = {key: sum(int(report.get(key, 0)) for report in reports)
+                    for key in ('tests', 'failures', 'errors', 'skipped')}
+          summary = 'Backend full suite: ' + ', '.join(f'{value} {key}' for key, value in counts.items())
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write(summary + '\n')
+          shutil.copytree(results, Path('build/test-results/full-suite'))
+          PY
       - name: Repeat lifecycle races on fresh test executions
         working-directory: backend
         run: |
