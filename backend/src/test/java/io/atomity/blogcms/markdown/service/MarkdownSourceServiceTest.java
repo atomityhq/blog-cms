@@ -125,6 +125,30 @@ class MarkdownSourceServiceTest {
     }
 
     @Test
+    void databaseWriteFailurePreservesTheOriginalExceptionWhenCleanupFails() {
+        RuntimeException databaseFailure = new RuntimeException("database write failed");
+        RuntimeException cleanupFailure = new RuntimeException("cleanup failed");
+        when(repository.save(any())).thenThrow(databaseFailure);
+        doThrow(cleanupFailure).when(storage).deleteRequired(anyString());
+
+        assertThatThrownBy(() -> service.upload(file())).isSameAs(databaseFailure)
+                .satisfies(ex -> assertThat(ex.getSuppressed()).containsExactly(cleanupFailure));
+        verify(storage).deleteRequired(anyString());
+        verify(manager).rollback(any());
+    }
+
+    @Test
+    void databaseWriteErrorCleansUpTheStoredFile() {
+        AssertionError databaseFailure = new AssertionError("database write failed");
+        when(repository.save(any())).thenThrow(databaseFailure);
+
+        assertThatThrownBy(() -> service.upload(file())).isSameAs(databaseFailure);
+        verify(storage).store(anyString(), any());
+        verify(storage).deleteRequired(anyString());
+        verify(manager).rollback(any());
+    }
+
+    @Test
     void uploadStorageFailureDoesNotWriteMetadata() {
         doThrow(new IllegalStateException("upload failed")).when(storage).store(anyString(), any());
         assertThatThrownBy(() -> service.upload(file())).hasMessage("upload failed");

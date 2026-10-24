@@ -11,8 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -131,7 +131,11 @@ public class MarkdownSourceService {
         });
     }
 
-    /** Stores the file, then records it. The file is removed again if the database write fails. */
+    /**
+     * Stores the file, then records it. WebDAV runs outside a database
+     * transaction so a slow Nextcloud call cannot hold a pool connection.
+     * If the database write fails the file is removed again.
+     */
     public MarkdownSourceRef upload(MultipartFile file) {
         String name = Filenames.clean(file.getOriginalFilename(), "post.md");
         String lower = name.toLowerCase(Locale.ROOT);
@@ -160,11 +164,15 @@ public class MarkdownSourceService {
 
         storage.store(key, bytes);
         try {
-            return transactions.execute(status -> {
+            MarkdownSourceRef recorded = transactions.execute(status -> {
                 MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
                 log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
                 return MarkdownSourceRef.of(source);
             });
+            if (recorded == null) {
+                throw new IllegalStateException("Markdown record was not saved");
+            }
+            return recorded;
         } catch (RuntimeException | Error failure) {
             try {
                 storage.deleteRequired(key);
