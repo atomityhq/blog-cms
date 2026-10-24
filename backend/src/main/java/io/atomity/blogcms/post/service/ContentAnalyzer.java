@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 /**
  * Reads a post body — a Tiptap/ProseMirror JSON document — on save: checks it is a
@@ -28,6 +29,13 @@ public final class ContentAnalyzer {
     private static final Pattern SAFE_LINK = Pattern.compile("^(https?://|mailto:|/|#).*", Pattern.CASE_INSENSITIVE);
     /** Images must come from the web or this server's media endpoint — never data: or javascript: URLs. */
     private static final Pattern SAFE_IMAGE_SRC = Pattern.compile("^(https?://|/).*", Pattern.CASE_INSENSITIVE);
+
+//    This pattern recognizes the media URL format used by your MediaRef.fileUrl() method, including relative URLs and absolute URLs
+//    whose path ends with the same media endpoint.
+    private static final Pattern MEDIA_FILE_URL = Pattern.compile(
+        "(?:^|/)api/v1/media/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/file(?:[?#].*)?$",
+        Pattern.CASE_INSENSITIVE
+    );
 
     public record Analysis(String text, int wordCount, int readingTimeMinutes, Set<UUID> imageIds) {
         public boolean isEmpty() {
@@ -106,6 +114,27 @@ public final class ContentAnalyzer {
                 imageIds.add(UUID.fromString(mediaId));
             } catch (IllegalArgumentException e) {
                 throw ApiException.badRequest("INVALID_CONTENT", "An image references an invalid media id");
+            }
+
+            //returning when Invalid Content Found or invalid Media ID
+            return;
+        }
+
+
+         /* Validates an image node and tracks the referenced media ID.
+         * If mediaId is missing, attempts to extract the ID from the media URL.
+         */
+
+        Matcher matcher = MEDIA_FILE_URL.matcher(src);
+
+        if (matcher.find()) {
+            try {
+                imageIds.add(UUID.fromString(matcher.group(1)));
+            } catch (IllegalArgumentException e) {
+                throw ApiException.badRequest(
+                    "INVALID_CONTENT",
+                    "An image references an invalid media id"
+                );
             }
         }
     }
