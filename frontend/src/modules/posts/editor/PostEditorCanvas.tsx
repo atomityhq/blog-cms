@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeft, Copy, EllipsisVertical, FileQuestion, Send, Trash2, Undo2 } from "lucide-react";
+import {Archive,ArrowLeft,CalendarClock,Copy,EllipsisVertical,FileQuestion,Send,Trash2,Undo2,} from "lucide-react";
 import { GuardedLink, useBlockNavigation, useGuardedNavigate } from "@/components/shell/NavigationGuard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,7 +19,7 @@ import { timeAgo } from "@/lib/format";
 import { slugify } from "@/lib/slug";
 import { ApiError } from "@/types/api";
 import { POST_LIMITS, type Post } from "@/types/post";
-import { archivePost, createPost, deletePost, duplicatePost, getPost, publishPost, unpublishPost, updatePost } from "../api";
+import {archivePost,cancelScheduledPost,createPost,deletePost,duplicatePost,getPost,publishPost,schedulePost,unpublishPost,updatePost,} from "../api";
 import { EditorSidebar, type EditorMeta } from "./EditorSidebar";
 import { EMPTY_FORM, formFromPost, inputFromForm, validateForm, type EditorForm } from "./form";
 import { RichTextEditor } from "./RichTextEditor";
@@ -49,12 +49,21 @@ export function PostEditorCanvas({ postId }: { postId?: string }) {
       </div>
     );
   }
+
   if (post.loading || post.data === undefined) return <EditorSkeleton />;
-  // Keyed so opening another post starts from a clean editor state.
+
   return <PostEditor key={post.data?.id ?? "new"} initial={post.data} />;
 }
 
-type Busy = "save" | "publish" | "status" | null;
+type Busy = "save" | "publish" | "status" | "schedule" | null;
+
+function toLocalDateTimeInput(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
 
 function PostEditor({ initial }: { initial: Post | null }) {
   const router = useRouter();
@@ -68,13 +77,18 @@ function PostEditor({ initial }: { initial: Post | null }) {
   const [showErrors, setShowErrors] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [scheduledAtInput, setScheduledAtInput] = useState(() =>
+    toLocalDateTimeInput(initial?.scheduledAt),
+  );
+  const [minimumScheduleDate] = useState(() =>
+  toLocalDateTimeInput(new Date(Date.now() + 60_000).toISOString()),
+);
 
-  // The slug follows the title until someone edits it by hand — except on posts that
-  // already have their own slug, where changing the title must not move the URL.
-  const slugFollowsTitle = useRef(!initial || (initial.status === "DRAFT" && initial.slug === slugify(initial.title)));
+  const slugFollowsTitle = useRef(
+    !initial || (initial.status === "DRAFT" && initial.slug === slugify(initial.title)),
+  );
 
   const dirty = JSON.stringify(form) !== savedSnapshot;
-  // A Markdown import still uploading counts as unsaved: leaving now would lose it.
   useUnsavedChangesWarning(dirty || importing);
   useBlockNavigation(dirty || importing);
   const guardedNavigate = useGuardedNavigate();
@@ -92,12 +106,18 @@ function PostEditor({ initial }: { initial: Post | null }) {
   const change = useCallback((patch: Partial<EditorForm>) => {
     setForm((current) => {
       const next = { ...current, ...patch };
-      if (patch.title !== undefined && slugFollowsTitle.current) next.slug = slugify(patch.title);
+      if (patch.title !== undefined && slugFollowsTitle.current) {
+        next.slug = slugify(patch.title);
+      }
       return next;
     });
   }, []);
 
-  const onContentChange = useCallback((content: EditorForm["content"]) => change({ content }), [change]);
+  const onContentChange = useCallback(
+    (content: EditorForm["content"]) => change({ content }),
+    [change],
+  );
+
   const onMarkdownSourceChange = useCallback(
     (markdownSource: EditorForm["markdownSource"]) => change({ markdownSource }),
     [change],
@@ -107,30 +127,40 @@ function PostEditor({ initial }: { initial: Post | null }) {
     toast.error(error instanceof Error ? error.message : "Something went wrong.");
   };
 
-  /** Saves the form; resolves to the saved post, or null if it couldn't be saved. */
+  /** Save the current form; return null if validation or the request fails. */
   const save = async (options: { quiet?: boolean } = {}): Promise<Post | null> => {
-    // Saving now would store the post without the file that is still uploading.
     if (importing) {
       toast.info("Wait for the Markdown import to finish.");
       return null;
     }
+
     if (hasErrors) {
       setShowErrors(true);
       toast.error("Fix the highlighted fields before saving.");
       return null;
     }
+
     const input = inputFromForm(form);
     setBusy("save");
+
     try {
-      const saved = post ? await updatePost(post.id, input, post.version) : await createPost(input);
+      const saved = post
+        ? await updatePost(post.id, input, post.version)
+        : await createPost(input);
+
       setPost(saved);
-      // The server may have filled in a slug; keep the form in step so it isn't dirty.
+
       const nextForm = { ...form, slug: saved.slug };
       setForm(nextForm);
       setSavedSnapshot(JSON.stringify(nextForm));
       setShowErrors(false);
-      if (!options.quiet) toast.success(post ? "Changes saved." : "Draft created.");
+
+      if (!options.quiet) {
+        toast.success(post ? "Changes saved." : "Draft created.");
+      }
+
       if (!post) router.replace(`/posts/${saved.id}`);
+
       return saved;
     } catch (error) {
       reportError(error);
@@ -140,11 +170,12 @@ function PostEditor({ initial }: { initial: Post | null }) {
     }
   };
 
-  // Latest save() for the keyboard shortcut, without re-binding the listener every render.
   const saveRef = useRef(save);
+
   useEffect(() => {
     saveRef.current = save;
   });
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
@@ -152,18 +183,26 @@ function PostEditor({ initial }: { initial: Post | null }) {
         void saveRef.current();
       }
     };
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  /** Status changes act on the saved post, so unsaved edits are saved first. */
-  const changeStatus = async (action: (id: string) => Promise<Post>, success: string, kind: Busy) => {
+  /** Apply a status-changing operation after saving pending edits. */
+  const changeStatus = async (
+    action: (id: string) => Promise<Post>,
+    success: string,
+    kind: Busy,
+  ) => {
     const current = dirty || !post ? await save({ quiet: true }) : post;
     if (!current) return;
+
     setBusy(kind);
+
     try {
       const updated = await action(current.id);
       setPost(updated);
+      setScheduledAtInput(toLocalDateTimeInput(updated.scheduledAt));
       toast.success(success);
     } catch (error) {
       reportError(error);
@@ -172,7 +211,56 @@ function PostEditor({ initial }: { initial: Post | null }) {
     }
   };
 
+  /** Save the draft first, then schedule it at the selected local date and time. */
+  const handleSchedule = async () => {
+    if (!scheduledAtInput) {
+      toast.error("Choose a date and time for publication.");
+      return;
+    }
+
+    const selectedDate = new Date(scheduledAtInput);
+
+    if (Number.isNaN(selectedDate.getTime()) || selectedDate.getTime() <= Date.now()) {
+      toast.error("Choose a future date and time.");
+      return;
+    }
+
+    const current = dirty || !post ? await save({ quiet: true }) : post;
+    if (!current) return;
+
+    setBusy("schedule");
+
+    try {
+      const updated = await schedulePost(current.id, selectedDate.toISOString());
+      setPost(updated);
+      setScheduledAtInput(toLocalDateTimeInput(updated.scheduledAt));
+      toast.success("Post scheduled successfully.");
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleCancelSchedule = async () => {
+    if (!post) return;
+
+    setBusy("schedule");
+
+    try {
+      const updated = await cancelScheduledPost(post.id);
+      setPost(updated);
+      setScheduledAtInput("");
+      toast.success("Schedule cancelled. The post is now a draft.");
+    } catch (error) {
+      reportError(error);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const status = meta.status;
+
   const menuItems: (MenuItem | "separator")[] = [
     ...(post
       ? [
@@ -192,66 +280,123 @@ function PostEditor({ initial }: { initial: Post | null }) {
         ]
       : []),
     ...(status === "PUBLISHED"
-      ? [{ label: "Unpublish", icon: Undo2, onSelect: () => void changeStatus(unpublishPost, "Moved back to drafts.", "status") }]
+      ? [
+          {
+            label: "Unpublish",
+            icon: Undo2,
+            onSelect: () =>
+              void changeStatus(unpublishPost, "Moved back to drafts.", "status"),
+          },
+        ]
       : []),
     ...(status !== "ARCHIVED" && post
-      ? [{ label: "Archive", icon: Archive, onSelect: () => void changeStatus(archivePost, "Post archived.", "status") }]
+      ? [
+          {
+            label: "Archive",
+            icon: Archive,
+            onSelect: () => void changeStatus(archivePost, "Post archived.", "status"),
+          },
+        ]
       : []),
-    ...(post ? ["separator" as const, { label: "Delete", icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) }] : []),
+    ...(post
+      ? [
+          "separator" as const,
+          {
+            label: "Delete",
+            icon: Trash2,
+            danger: true,
+            onSelect: () => setConfirmDelete(true),
+          },
+        ]
+      : []),
   ];
 
-  // Header actions wait for both a running request and an import that is still uploading.
   const locked = busy !== null || importing;
-  const saveState = busy === "save" ? "Saving…" : dirty ? "Unsaved changes" : post ? `Saved ${timeAgo(post.updatedAt)}` : "Not saved yet";
+  const saveState =
+    busy === "save"
+      ? "Saving…"
+      : dirty
+        ? "Unsaved changes"
+        : post
+          ? `Saved ${timeAgo(post.updatedAt)}`
+          : "Not saved yet";
 
   return (
     <div className="flex flex-col">
-      {/* Action bar */}
       <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-page/95 px-[var(--page-pad)] py-2.5 backdrop-blur">
-        <GuardedLink href="/posts" className="flex items-center gap-1.5 text-[12px] font-semibold text-secondary hover:text-ink">
+        <GuardedLink
+          href="/posts"
+          className="flex items-center gap-1.5 text-[12px] font-semibold text-secondary hover:text-ink"
+        >
           <ArrowLeft size={14} aria-hidden /> Posts
         </GuardedLink>
+
         <span aria-hidden className="h-4 w-px bg-line" />
         <PostStatusChip status={status} />
-        <span className={dirty ? "text-[12px] font-semibold text-warning" : "text-[12px] text-muted"} aria-live="polite">
+
+        <span
+          className={dirty ? "text-[12px] font-semibold text-warning" : "text-[12px] text-muted"}
+          aria-live="polite"
+        >
           {saveState}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
           {status === "PUBLISHED" ? (
-            <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={locked || (!dirty && Boolean(post))}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void save()}
+              disabled={locked || (!dirty && Boolean(post))}
+            >
               {busy === "save" && <Spinner size={12} />}
               Update
             </button>
+          ) : status === "ARCHIVED" ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void save()}
+                disabled={locked || (!dirty && Boolean(post))}
+              >
+                {busy === "save" && <Spinner size={12} />}
+                Save
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={locked}
+                onClick={() => void changeStatus(unpublishPost, "Restored to drafts.", "status")}
+              >
+                {busy === "status" ? <Spinner size={12} /> : <Undo2 size={13} aria-hidden />}
+                Restore
+              </button>
+            </>
           ) : (
             <>
-              <button type="button" className="btn btn-secondary" onClick={() => void save()} disabled={locked || (!dirty && Boolean(post))}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void save()}
+                disabled={locked || (!dirty && Boolean(post))}
+              >
                 {busy === "save" && <Spinner size={12} />}
-                {status === "ARCHIVED" ? "Save" : "Save draft"}
+                Save draft
               </button>
-              {status === "ARCHIVED" ? (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={locked}
-                  onClick={() => void changeStatus(unpublishPost, "Restored to drafts.", "status")}
-                >
-                  {busy === "status" ? <Spinner size={12} /> : <Undo2 size={13} aria-hidden />}
-                  Restore
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-green"
-                  disabled={locked}
-                  onClick={() => void changeStatus(publishPost, "Post published.", "publish")}
-                >
-                  {busy === "publish" ? <Spinner size={12} /> : <Send size={13} aria-hidden />}
-                  Publish
-                </button>
-              )}
+
+              <button
+                type="button"
+                className="btn btn-green"
+                disabled={locked}
+                onClick={() => void changeStatus(publishPost, "Post published.", "publish")}
+              >
+                {busy === "publish" ? <Spinner size={12} /> : <Send size={13} aria-hidden />}
+                Publish now
+              </button>
             </>
           )}
+
           {menuItems.length > 0 && (
             <Menu
               items={menuItems}
@@ -270,7 +415,50 @@ function PostEditor({ initial }: { initial: Post | null }) {
         </div>
       </div>
 
-      {/* Writing area + sidebar */}
+      {status !== "PUBLISHED" && status !== "ARCHIVED" && (
+        <div className="mx-auto flex w-full max-w-[1280px] flex-wrap items-end gap-3 px-[var(--page-pad)] pt-4">
+          <div className="flex min-w-[240px] flex-1 flex-col gap-1">
+            <label htmlFor="scheduled-at" className="text-[12px] font-semibold text-secondary">
+              Publish date and time
+            </label>
+            <input
+              id="scheduled-at"
+              type="datetime-local"
+              className="input max-w-[320px]"
+              value={scheduledAtInput}
+              min={minimumScheduleDate}
+              onChange={(event) => setScheduledAtInput(event.target.value)}
+              disabled={locked}
+            />
+            <span className="text-[11px] text-muted">
+              Uses your local time zone. Leave this unused to keep the post as a draft.
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void handleSchedule()}
+            disabled={locked || !scheduledAtInput}
+          >
+            {busy === "schedule" ? <Spinner size={12} /> : <CalendarClock size={13} aria-hidden />}
+            {status === "SCHEDULED" ? "Reschedule post" : "Schedule post"}
+          </button>
+
+          {status === "SCHEDULED" && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleCancelSchedule()}
+              disabled={locked}
+            >
+              {busy === "schedule" ? <Spinner size={12} /> : <Undo2 size={13} aria-hidden />}
+              Cancel schedule
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mx-auto grid w-full max-w-[1280px] grid-cols-1 gap-5 p-[var(--page-pad)] lg:grid-cols-[minmax(0,1fr)_var(--editor-sidebar-w)]">
         <div className="flex min-w-0 flex-col gap-3">
           <div>
@@ -281,7 +469,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
               id="post-title"
               rows={1}
               value={form.title}
-              onChange={(e) => change({ title: e.target.value.replace(/\n/g, " ") })}
+              onChange={(event) => change({ title: event.target.value.replace(/\n/g, " ") })}
               placeholder="Post title"
               aria-invalid={showErrors && Boolean(errors.title)}
               className="w-full resize-none bg-transparent text-[30px] leading-tight font-bold tracking-[-0.02em] outline-none [field-sizing:content] placeholder:text-[var(--atomity-gray-300)]"
@@ -295,6 +483,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
               )}
             </div>
           </div>
+
           <RichTextEditor
             value={form.content}
             onChange={onContentChange}
@@ -333,6 +522,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
               reportError(error);
               throw error;
             }
+
             setSavedSnapshot(JSON.stringify(form));
             toast.success("Post deleted.");
             router.push("/posts");
@@ -353,8 +543,8 @@ function EditorSkeleton() {
           <div className="skeleton h-[460px] w-full !rounded-lg" />
         </div>
         <div className="flex flex-col gap-3">
-          {[120, 180, 160, 140].map((h) => (
-            <div key={h} className="skeleton w-full !rounded-lg" style={{ height: h }} />
+          {[120, 180, 160, 140].map((height) => (
+            <div key={height} className="skeleton w-full !rounded-lg" style={{ height }} />
           ))}
         </div>
       </div>

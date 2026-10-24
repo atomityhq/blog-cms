@@ -36,7 +36,16 @@ import { formatDateTime, timeAgo } from "@/lib/format";
 import { listAuthors } from "@/modules/authors/api";
 import { listTags } from "@/modules/tags/api";
 import type { PostSortKey, PostStatus, PostSummary } from "@/types/post";
-import { archivePost, countPostsByStatus, deletePost, duplicatePost, listPosts, publishPost, unpublishPost } from "./api";
+import {
+  archivePost,
+  cancelScheduledPost,
+  countPostsByStatus,
+  deletePost,
+  duplicatePost,
+  listPosts,
+  publishPost,
+  unpublishPost,
+} from "./api";
 
 type StatusTab = PostStatus | "ALL";
 
@@ -50,7 +59,10 @@ export function PostsListCanvas() {
   const [query, setQuery] = useState("");
   const [tagId, setTagId] = useState("");
   const [authorId, setAuthorId] = useState("");
-  const [sort, setSort] = useState<DataTableSort>({ key: "updatedAt", direction: "desc" });
+  const [sort, setSort] = useState<DataTableSort>({
+    key: "updatedAt",
+    direction: "desc",
+  });
   const [page, setPage] = useState(0);
   const [pendingDelete, setPendingDelete] = useState<PostSummary | null>(null);
   const debouncedQuery = useDebouncedValue(query);
@@ -69,11 +81,13 @@ export function PostsListCanvas() {
       }),
     [tab, debouncedQuery, tagId, authorId, sort, page],
   );
+
   const counts = useAsync(countPostsByStatus, []);
   const authors = useAsync(listAuthors, []);
   const tags = useAsync(listTags, []);
 
   const hasFilters = Boolean(query || tagId || authorId);
+
   const resetPage = <T,>(setter: (value: T) => void) => (value: T) => {
     setter(value);
     setPage(0);
@@ -97,21 +111,76 @@ export function PostsListCanvas() {
   };
 
   const rowActions = (post: PostSummary): (MenuItem | "separator")[] => [
-    { label: "Edit", icon: Pencil, onSelect: () => router.push(`/posts/${post.id}`) },
+    {
+      label: "Edit",
+      icon: Pencil,
+      onSelect: () => router.push(`/posts/${post.id}`),
+    },
     {
       label: "Duplicate",
       icon: Copy,
-      onSelect: () => void run(() => duplicatePost(post.id), `Created a copy of “${post.title || "Untitled"}”.`).catch(() => {}),
+      onSelect: () =>
+        void run(
+          () => duplicatePost(post.id),
+          `Created a copy of “${post.title || "Untitled"}”.`,
+        ).catch(() => {}),
     },
     "separator",
-    post.status === "PUBLISHED"
-      ? { label: "Unpublish", icon: Undo2, onSelect: () => void run(() => unpublishPost(post.id), "Moved back to drafts.").catch(() => {}) }
-      : { label: "Publish", icon: Send, onSelect: () => void run(() => publishPost(post.id), "Post published.").catch(() => {}) },
+    post.status === "SCHEDULED"
+      ? {
+          label: "Cancel schedule",
+          icon: Undo2,
+          onSelect: () =>
+            void run(
+              () => cancelScheduledPost(post.id),
+              "Scheduled publication cancelled.",
+            ).catch(() => {}),
+        }
+      : post.status === "PUBLISHED"
+        ? {
+            label: "Unpublish",
+            icon: Undo2,
+            onSelect: () =>
+              void run(
+                () => unpublishPost(post.id),
+                "Moved back to drafts.",
+              ).catch(() => {}),
+          }
+        : {
+            label: "Publish",
+            icon: Send,
+            onSelect: () =>
+              void run(
+                () => publishPost(post.id),
+                "Post published.",
+              ).catch(() => {}),
+          },
     post.status === "ARCHIVED"
-      ? { label: "Restore to drafts", icon: Undo2, onSelect: () => void run(() => unpublishPost(post.id), "Restored to drafts.").catch(() => {}) }
-      : { label: "Archive", icon: Archive, onSelect: () => void run(() => archivePost(post.id), "Post archived.").catch(() => {}) },
+      ? {
+          label: "Restore to drafts",
+          icon: Undo2,
+          onSelect: () =>
+            void run(
+              () => unpublishPost(post.id),
+              "Restored to drafts.",
+            ).catch(() => {}),
+        }
+      : {
+          label: "Archive",
+          icon: Archive,
+          onSelect: () =>
+            void run(
+              () => archivePost(post.id),
+              "Post archived.",
+            ).catch(() => {}),
+        },
     "separator",
-    { label: "Delete", icon: Trash2, danger: true, onSelect: () => setPendingDelete(post) },
+    {
+      label: "Delete",
+      icon: Trash2,
+      danger: true,
+      onSelect: () => setPendingDelete(post),
+    },
   ];
 
   const columns: DataTableColumn<PostSummary>[] = [
@@ -122,7 +191,11 @@ export function PostsListCanvas() {
       render: (post) => (
         <div className="flex min-w-0 items-center gap-3">
           {post.coverImage ? (
-            <img src={post.coverImage.url} alt="" className="h-9 w-14 shrink-0 rounded-sm border border-line object-cover" />
+            <img
+              src={post.coverImage.url}
+              alt=""
+              className="h-9 w-14 shrink-0 rounded-sm border border-line object-cover"
+            />
           ) : (
             <span className="flex h-9 w-14 shrink-0 items-center justify-center rounded-sm border border-dashed border-line text-[var(--atomity-gray-400)]">
               <FileText size={14} aria-hidden />
@@ -130,18 +203,42 @@ export function PostsListCanvas() {
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className={post.title ? "truncate font-semibold" : "truncate font-semibold text-muted italic"}>
+              <span
+                className={
+                  post.title
+                    ? "truncate font-semibold"
+                    : "truncate font-semibold text-muted italic"
+                }
+              >
                 {post.title || "Untitled"}
               </span>
-              {post.featured && <Star size={12} className="shrink-0 fill-[var(--atomity-orange)] text-[var(--atomity-orange)]" aria-label="Featured" />}
+              {post.featured && (
+                <Star
+                  size={12}
+                  className="shrink-0 fill-[var(--atomity-orange)] text-[var(--atomity-orange)]"
+                  aria-label="Featured"
+                />
+              )}
             </div>
-            <div className="truncate font-mono text-[11px] text-muted">/{post.slug}</div>
+            <div className="truncate font-mono text-[11px] text-muted">
+              /{post.slug}
+            </div>
           </div>
         </div>
       ),
     },
-    { key: "status", header: "Status", width: "112px", render: (post) => <PostStatusChip status={post.status} /> },
-    { key: "authors", header: "Authors", width: "104px", render: (post) => <AvatarStack people={post.authors} /> },
+    {
+      key: "status",
+      header: "Status",
+      width: "112px",
+      render: (post) => <PostStatusChip status={post.status} />,
+    },
+    {
+      key: "authors",
+      header: "Authors",
+      width: "104px",
+      render: (post) => <AvatarStack people={post.authors} />,
+    },
     {
       key: "tags",
       header: "Tags",
@@ -152,11 +249,19 @@ export function PostsListCanvas() {
         ) : (
           <div className="flex flex-wrap gap-1">
             {post.tags.slice(0, 2).map((tag) => (
-              <StatusChip key={tag.id} tone="neutral" className="!normal-case !tracking-normal">
+              <StatusChip
+                key={tag.id}
+                tone="neutral"
+                className="!normal-case !tracking-normal"
+              >
                 {tag.name}
               </StatusChip>
             ))}
-            {post.tags.length > 2 && <span className="font-mono text-[10px] text-muted">+{post.tags.length - 2}</span>}
+            {post.tags.length > 2 && (
+              <span className="font-mono text-[10px] text-muted">
+                +{post.tags.length - 2}
+              </span>
+            )}
           </div>
         ),
     },
@@ -166,7 +271,10 @@ export function PostsListCanvas() {
       width: "116px",
       sortable: true,
       render: (post) => (
-        <span title={formatDateTime(post.updatedAt)} className="text-secondary">
+        <span
+          title={formatDateTime(post.updatedAt)}
+          className="text-secondary"
+        >
           {timeAgo(post.updatedAt)}
         </span>
       ),
@@ -177,7 +285,11 @@ export function PostsListCanvas() {
       width: "80px",
       align: "right",
       sortable: true,
-      render: (post) => <span className="font-mono text-[11.5px] tabular-nums">{post.wordCount.toLocaleString()}</span>,
+      render: (post) => (
+        <span className="font-mono text-[11.5px] tabular-nums">
+          {post.wordCount.toLocaleString()}
+        </span>
+      ),
     },
     {
       key: "actions",
@@ -185,7 +297,11 @@ export function PostsListCanvas() {
       width: "48px",
       align: "right",
       render: (post) => (
-        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="inline-flex">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="inline-flex"
+        >
           <Menu
             items={rowActions(post)}
             trigger={(props) => (
@@ -207,7 +323,12 @@ export function PostsListCanvas() {
   const onSortChange = (key: string) => {
     setSort((current) => ({
       key,
-      direction: current.key === key && current.direction === "desc" ? "asc" : key === "title" ? "asc" : "desc",
+      direction:
+        current.key === key && current.direction === "desc"
+          ? "asc"
+          : key === "title"
+            ? "asc"
+            : "desc",
     }));
     setPage(0);
   };
@@ -237,7 +358,16 @@ export function PostsListCanvas() {
             items={[
               { key: "ALL", label: "All", count: counts.data?.ALL },
               { key: "DRAFT", label: "Drafts", count: counts.data?.DRAFT },
-              { key: "PUBLISHED", label: "Published", count: counts.data?.PUBLISHED },
+              {
+                key: "PUBLISHED",
+                label: "Published",
+                count: counts.data?.PUBLISHED,
+              },
+              {
+                key: "SCHEDULED",
+                label: "Scheduled",
+                count: counts.data?.SCHEDULED,
+              },
               { key: "ARCHIVED", label: "Archived", count: counts.data?.ARCHIVED },
             ]}
           />
@@ -245,21 +375,38 @@ export function PostsListCanvas() {
 
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-3.5 py-3">
           <div className="min-w-[220px] flex-1">
-            <SearchInput label="Search posts" placeholder="Search title, slug or content" value={query} onChange={resetPage(setQuery)} />
+            <SearchInput
+              label="Search posts"
+              placeholder="Search title, slug or content"
+              value={query}
+              onChange={resetPage(setQuery)}
+            />
           </div>
           <Select
             aria-label="Filter by author"
             value={authorId}
             onChange={(e) => resetPage(setAuthorId)(e.target.value)}
             className="w-[170px]"
-            options={[{ value: "", label: "All authors" }, ...(authors.data ?? []).map((a) => ({ value: a.id, label: a.name }))]}
+            options={[
+              { value: "", label: "All authors" },
+              ...(authors.data ?? []).map((author) => ({
+                value: author.id,
+                label: author.name,
+              })),
+            ]}
           />
           <Select
             aria-label="Filter by tag"
             value={tagId}
             onChange={(e) => resetPage(setTagId)(e.target.value)}
             className="w-[160px]"
-            options={[{ value: "", label: "All tags" }, ...(tags.data ?? []).map((t) => ({ value: t.id, label: t.name }))]}
+            options={[
+              { value: "", label: "All tags" },
+              ...(tags.data ?? []).map((tag) => ({
+                value: tag.id,
+                label: tag.name,
+              })),
+            ]}
           />
           {hasFilters && (
             <button
@@ -280,19 +427,30 @@ export function PostsListCanvas() {
         <div className="px-1">
           {posts.error ? (
             <div className="p-4">
-              <ErrorState title="Couldn't load posts" error={posts.error} onRetry={posts.reload} />
+              <ErrorState
+                title="Couldn't load posts"
+                error={posts.error}
+                onRetry={posts.reload}
+              />
             </div>
           ) : !isFirstLoad && rows.length === 0 ? (
             <div className="p-4">
               {hasFilters || tab !== "ALL" ? (
-                <EmptyState icon={SearchX} title="No posts match" description="Try a different search, status or filter." />
+                <EmptyState
+                  icon={SearchX}
+                  title="No posts match"
+                  description="Try a different search, status or filter."
+                />
               ) : (
                 <EmptyState
                   icon={FileText}
                   title="No posts yet"
                   description="Your first post is one click away."
                   action={
-                    <Link href="/posts/new" className="btn btn-primary btn-sm">
+                    <Link
+                      href="/posts/new"
+                      className="btn btn-primary btn-sm"
+                    >
                       <Plus size={13} aria-hidden /> New post
                     </Link>
                   }
@@ -315,7 +473,11 @@ export function PostsListCanvas() {
 
         {posts.data && posts.data.meta.totalElements > 0 && (
           <div className="border-t border-line px-3.5 py-2">
-            <Pagination meta={posts.data.meta} onPageChange={setPage} noun="posts" />
+            <Pagination
+              meta={posts.data.meta}
+              onPageChange={setPage}
+              noun="posts"
+            />
           </div>
         )}
       </div>
@@ -325,14 +487,17 @@ export function PostsListCanvas() {
           title="Delete this post?"
           message={
             <>
-              <strong>{pendingDelete.title || "Untitled"}</strong> will be permanently deleted. This can’t be undone — archive it
-              instead if you might need it again.
+              <strong>{pendingDelete.title || "Untitled"}</strong> will be
+              permanently deleted. This can’t be undone — archive it instead if
+              you might need it again.
             </>
           }
           confirmLabel="Delete"
           danger
           onClose={() => setPendingDelete(null)}
-          onConfirm={() => run(() => deletePost(pendingDelete.id), "Post deleted.")}
+          onConfirm={() =>
+            run(() => deletePost(pendingDelete.id), "Post deleted.")
+          }
         />
       )}
     </div>
