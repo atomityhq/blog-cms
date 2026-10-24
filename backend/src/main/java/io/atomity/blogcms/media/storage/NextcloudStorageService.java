@@ -99,6 +99,14 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
 
         this.client = RestClient.builder()
                 .requestFactory(requestFactory)
+                .requestInterceptor((request, body, execution) -> {
+                    try {
+                        return execution.execute(request, body);
+                    } catch (CancellationException cancelled) {
+                        // Normalize JDK request-timeout cancellation once for all WebDAV calls.
+                        throw new RestClientException("Nextcloud request was cancelled", cancelled);
+                    }
+                })
                 .defaultHeader(HttpHeaders.AUTHORIZATION, authorizationHeader())
                 .build();
     }
@@ -170,7 +178,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
 
             published = true;
             return PublishResult.PUBLISHED;
-        } catch (RestClientException | CancellationException ex) {
+        } catch (RestClientException ex) {
             log.warn("Nextcloud upload failed ({})",
                     ex.getClass().getSimpleName());
             return PublishResult.FAILED;
@@ -251,7 +259,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                         log.warn("Nextcloud deletion failed with HTTP status {}", status);
                         throw storageUnavailable();
                     });
-        } catch (RestClientException | CancellationException ex) {
+        } catch (RestClientException ex) {
             log.warn("Nextcloud deletion failed ({})",
                     ex.getClass().getSimpleName());
             throw storageUnavailable();
@@ -309,7 +317,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                                         response.getStatusCode().value());
                                 throw storageUnavailable();
                             });
-                } catch (RestClientException | CancellationException ex) {
+                } catch (RestClientException ex) {
                     log.warn(
                             "Nextcloud directory creation failed ({})",
                             ex.getClass().getSimpleName());
@@ -327,7 +335,7 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                     .uri(remoteUri(path))
                     .header("Depth", "0")
                     .exchange((request, response) -> response.getStatusCode().is2xxSuccessful());
-        } catch (RestClientException | CancellationException ex) {
+        } catch (RestClientException ex) {
             log.warn("Nextcloud directory verification failed ({})",
                     ex.getClass().getSimpleName());
             return false;

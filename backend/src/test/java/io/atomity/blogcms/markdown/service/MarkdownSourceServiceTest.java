@@ -23,7 +23,8 @@ class MarkdownSourceServiceTest {
     private final MarkdownSourceRepository repository = mock(MarkdownSourceRepository.class);
     private final StorageService storage = mock(StorageService.class);
     private final PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
-    private final MarkdownSourceService service = new MarkdownSourceService(repository, storage, manager);
+    private final jakarta.persistence.EntityManager entityManager = mock(jakarta.persistence.EntityManager.class);
+    private final MarkdownSourceService service = new MarkdownSourceService(repository, storage, manager, entityManager);
     private final MarkdownSource source = MarkdownSource.create(UUID.randomUUID(), "markdown/test.md", "test.md", 6);
 
     @BeforeEach
@@ -129,6 +130,62 @@ class MarkdownSourceServiceTest {
         assertThatThrownBy(() -> service.upload(file())).hasMessage("upload failed");
         verify(repository, never()).save(any());
         verifyNoInteractions(manager);
+    }
+
+    @Test
+    void attachmentRefreshesTheEntityAfterAcquiringItsLock() {
+        service.getForPost(source.getId());
+        var order = inOrder(repository, entityManager);
+        order.verify(repository).findForUpdate(source.getId());
+        order.verify(entityManager).refresh(source);
+    }
+
+    @Test
+    void replacementLocksDistinctSourceIdsInStableOrder() {
+        UUID first = new UUID(0, 1);
+        UUID second = new UUID(0, 2);
+        service.lockForPostChange(second, first);
+        var order = inOrder(repository);
+        order.verify(repository).findForUpdate(first);
+        order.verify(repository).findForUpdate(second);
+        reset(repository);
+        service.lockForPostChange(first, first);
+        verify(repository, times(1)).findForUpdate(first);
+    }
+
+    @Test
+    void automaticCleanupLocksBeforeCheckingReferences() {
+        when(repository.countUsages(source.getId())).thenReturn(1L);
+        service.deleteIfUnused(source);
+        var order = inOrder(repository, entityManager);
+        order.verify(repository).findForUpdate(source.getId());
+        order.verify(entityManager).refresh(source);
+        order.verify(repository).countUsages(source.getId());
+        verify(repository, never()).delete(any());
+        verifyNoInteractions(storage);
+    }
+
+    @Test
+    void automaticCleanupOfAnAlreadyDeletedSourceIsHarmless() {
+        when(repository.findForUpdate(source.getId())).thenReturn(Optional.empty());
+        service.deleteIfUnused(source);
+        verify(repository, never()).countUsages(any());
+        verify(repository, never()).delete(any());
+    }
+
+    @Test
+    void automaticCleanupOnlyTouchesStorageAfterCommitAndDoesNotFailASavedPost() {
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.deleteIfUnused(source);
+            verifyNoInteractions(storage);
+            var callbacks = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            doThrow(new RuntimeException("remote unavailable")).when(storage).delete(source.getStorageKey());
+            assertThatCode(() -> callbacks.forEach(callback -> callback.afterCommit())).doesNotThrowAnyException();
+            verify(storage).delete(source.getStorageKey());
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     private static MockMultipartFile file() {

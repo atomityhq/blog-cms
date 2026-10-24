@@ -34,6 +34,7 @@ class MarkdownSourceDeletionIntegrationTest extends IntegrationTest {
     @Autowired private StorageService storage;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private jakarta.persistence.EntityManager entityManager;
 
     private UUID upload() {
         return sources.upload(new MockMultipartFile("file", "race.md", "text/markdown",
@@ -50,7 +51,7 @@ class MarkdownSourceDeletionIntegrationTest extends IntegrationTest {
         UUID id = upload();
         String key = repository.findById(id).orElseThrow().getStorageKey();
         StorageService remote = spy(storage);
-        var deletion = new MarkdownSourceService(repository, remote, transactionManager);
+        var deletion = new MarkdownSourceService(repository, remote, transactionManager, entityManager);
         doAnswer(invocation -> {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MEDIA_STORAGE_UNAVAILABLE", "Try again");
@@ -75,7 +76,7 @@ class MarkdownSourceDeletionIntegrationTest extends IntegrationTest {
         UUID id = upload();
         String key = repository.findById(id).orElseThrow().getStorageKey();
         StorageService remote = spy(storage);
-        var deletion = new MarkdownSourceService(repository, remote, transactionManager);
+        var deletion = new MarkdownSourceService(repository, remote, transactionManager, entityManager);
         var deleting = new CountDownLatch(1);
         var finish = new CountDownLatch(1);
         doAnswer(invocation -> {

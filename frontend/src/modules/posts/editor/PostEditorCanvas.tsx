@@ -300,6 +300,7 @@ function PostEditor({ initial }: { initial: Post | null }) {
             onChange={onContentChange}
             markdownSource={form.markdownSource}
             savedMarkdownSourceId={post?.markdownSource?.id ?? null}
+            disabled={busy !== null}
             onMarkdownSourceChange={onMarkdownSourceChange}
             onImportingChange={setImporting}
           />

@@ -109,6 +109,8 @@ public class PostService {
                     "This post was changed somewhere else since you opened it. Reload to get the latest version.");
         }
         MarkdownSource previousSource = post.getMarkdownSource();
+        markdownSourceService.lockForPostChange(previousSource == null ? null : previousSource.getId(),
+                request.markdownSourceId());
         post.edit(resolveEdit(request, id));
         // Flush so the response carries the incremented version.
         PostResponse response = PostResponse.of(postRepository.saveAndFlush(post));
@@ -156,6 +158,9 @@ public class PostService {
     @Transactional
     public PostResponse duplicate(UUID id) {
         Post source = find(id);
+        if (source.getMarkdownSource() != null) {
+            markdownSourceService.getForPost(source.getMarkdownSource().getId());
+        }
         String title = truncate(source.getTitle().isBlank() ? "Untitled (copy)" : source.getTitle() + " (copy)", MAX_TITLE_LENGTH);
         String base = truncate(source.getSlug(), MAX_SLUG_LENGTH - 10) + "-copy";
         String slug = base;
@@ -169,6 +174,7 @@ public class PostService {
     public void delete(UUID id) {
         Post post = find(id);
         MarkdownSource source = post.getMarkdownSource();
+        markdownSourceService.lockForPostChange(source == null ? null : source.getId(), null);
         postRepository.delete(post);
         postRepository.flush();
         markdownSourceService.deleteIfUnused(source);

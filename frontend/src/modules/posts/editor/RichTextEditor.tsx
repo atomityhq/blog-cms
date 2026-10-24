@@ -31,13 +31,14 @@ import type { MarkdownSourceRef } from "@/types/markdown";
 import { editorExtensions } from "./extensions";
 import { MarkdownSourceBar } from "./MarkdownSourceBar";
 import { useMarkdownImport } from "./useMarkdownImport";
-import { deleteMarkdownSource } from "../api";
+import { deleteSourceIfPresent } from "./markdownSourceLifecycle";
 
 export interface RichTextEditorProps {
   value: ContentDoc;
   onChange: (doc: ContentDoc) => void;
   markdownSource: MarkdownSourceRef | null;
   savedMarkdownSourceId: string | null;
+  disabled?: boolean;
   onMarkdownSourceChange: (source: MarkdownSourceRef | null) => void;
   /** True while an imported file is uploading, so the page can block navigation. */
   onImportingChange: (importing: boolean) => void;
@@ -52,6 +53,7 @@ export function RichTextEditor({
   onChange,
   markdownSource,
   savedMarkdownSourceId,
+  disabled = false,
   onMarkdownSourceChange,
   onImportingChange,
 }: RichTextEditorProps) {
@@ -67,10 +69,11 @@ export function RichTextEditor({
       attributes: { class: "post-content", "aria-label": "Post content", "aria-multiline": "true", role: "textbox" },
     },
   });
-  const markdownImport = useMarkdownImport(editor, onMarkdownSourceChange, onImportingChange);
+  const markdownImport = useMarkdownImport(editor, onMarkdownSourceChange, onImportingChange,
+    markdownSource, savedMarkdownSourceId, disabled);
 
   const removeSource = async () => {
-    if (!markdownSource) return;
+    if (!markdownSource || disabled || removing || markdownImport.uploading) return;
     // A saved source is unlinked on Save so discarding editor changes stays safe.
     if (markdownSource.id === savedMarkdownSourceId) {
       onMarkdownSourceChange(null);
@@ -79,7 +82,7 @@ export function RichTextEditor({
     setRemoving(true);
     onImportingChange(true);
     try {
-      await deleteMarkdownSource(markdownSource.id);
+      await deleteSourceIfPresent(markdownSource.id);
       onMarkdownSourceChange(null);
     } catch (error) {
       // Keep the filename visible so Remove retries a failed Nextcloud deletion.
@@ -95,6 +98,7 @@ export function RichTextEditor({
       <MarkdownSourceBar
         source={markdownSource}
         uploading={markdownImport.uploading || removing}
+        disabled={disabled}
         onImport={markdownImport.openFilePicker}
         onRemove={() => void removeSource()}
       />
