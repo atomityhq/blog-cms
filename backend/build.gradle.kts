@@ -1,3 +1,5 @@
+import java.nio.file.Paths
+
 plugins {
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependency.management)
@@ -52,4 +54,17 @@ tasks.jar {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Sanitize PATH passed to test JVM on Windows to avoid InvalidPathException from malformed system PATH
+    val rawPath = System.getenv("PATH") ?: ""
+    val cleanPath = rawPath.split(File.pathSeparator)
+        .filter { pathEntry ->
+            try {
+                Paths.get(pathEntry)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+        .joinToString(File.pathSeparator)
+    environment("PATH", cleanPath)
 }

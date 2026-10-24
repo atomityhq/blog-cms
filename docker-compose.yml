@@ -1,5 +1,4 @@
-# Full local stack: `docker compose up --build`, then open http://localhost:3000.
-# Values come from .env (copy .env.example); the defaults below are for local use only.
+
 name: blog-cms
 
 services:
@@ -10,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-blog_cms}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blog_cms}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -22,19 +21,23 @@ services:
   backend:
     build: ./backend
     environment:
+      SPRING_PROFILES_ACTIVE: local-storage
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-blog_cms}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-blog_cms}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-blog_cms}
-      # Local defaults sign you in as admin@example.com / admin. Override all three in .env for anything real.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-$$2a$$10$$wBISilJqYrK8S7ddSh4zhuWUnPjn24l5hToR4l4lIkKH/WG.fsKI6}
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-not-for-production-use}
-      NEXTCLOUD_URL: ${NEXTCLOUD_URL:?Set NEXTCLOUD_URL in .env}
-      NEXTCLOUD_USERNAME: ${NEXTCLOUD_USERNAME:?Set NEXTCLOUD_USERNAME in .env}
-      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:?Set NEXTCLOUD_PASSWORD in .env}
+      SERVER_PORT: 8080
+      BLOGCMS_MEDIA_LOCAL_DIRECTORY: /app/uploads
+
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:-https://nextcloud.example.com}
+      NEXTCLOUD_USERNAME: ${NEXTCLOUD_USERNAME:-blogcms}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-replace-with-nextcloud-app-password}
       NEXTCLOUD_REMOTE_DIRECTORY: ${NEXTCLOUD_REMOTE_DIRECTORY:-/BlogCMS}
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
+
+    volumes:
+      - ./backend/uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,8 +46,6 @@ services:
     build: ./frontend
     environment:
       BACKEND_API_URL: http://backend:8080
-      # This stack serves plain HTTP, where browsers other than Chrome/Firefox-on-localhost
-      # drop Secure cookies. Set to true in .env when serving over HTTPS.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"

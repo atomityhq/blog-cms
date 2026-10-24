@@ -38,7 +38,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@Profile("!test")
+@Profile("!test & !local-storage")
 @Service
 public class NextcloudStorageService implements StorageService, AutoCloseable {
 

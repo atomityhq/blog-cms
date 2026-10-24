@@ -22,20 +22,18 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-        return ApiResponse.ok(authService.login(request.email(), request.password(), clientKey(http)));
+    public ApiResponse<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest http) {
+        return ApiResponse.ok(
+                authService.login(request.email(), request.password(), clientKey(http)));
     }
 
     /**
-     * Who is signing in, for rate limiting. The backend is only reachable through the
-     * frontend's route handlers, which set X-Forwarded-For to the browser's address;
-     * without it, the direct peer address is used.
+     * Uses the direct peer address for rate limiting.
+     * Forwarded headers are not trusted without a trusted-proxy configuration.
      */
     private static String clientKey(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].strip();
-        }
         return request.getRemoteAddr();
     }
 }
