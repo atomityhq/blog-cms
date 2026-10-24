@@ -82,6 +82,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
             </div>
             <Menu
               align="left"
+              placement="top"
               trigger={(props) => (
                 <button
                   type="button"
