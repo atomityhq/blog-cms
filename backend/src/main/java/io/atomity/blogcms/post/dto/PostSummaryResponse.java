@@ -11,7 +11,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
-/** One row in the posts list — everything except the body. */
 public record PostSummaryResponse(
         UUID id,
         String title,
@@ -25,21 +24,40 @@ public record PostSummaryResponse(
         int wordCount,
         int readingTimeMinutes,
         Instant publishedAt,
+        Instant scheduledAt,
         Instant createdAt,
         Instant updatedAt) {
 
     public static PostSummaryResponse of(Post post) {
-        return new PostSummaryResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getStatus(),
-                post.isFeatured(), authorRefs(post), tagRefs(post), MediaRef.of(post.getCoverImage()), post.getWordCount(),
-                post.getReadingTimeMinutes(), post.getPublishedAt(), post.getCreatedAt(), post.getUpdatedAt());
+        return new PostSummaryResponse(
+                post.getId(),
+                post.getTitle(),
+                post.getSlug(),
+                post.getExcerpt(),
+                post.getStatus(),
+                post.isFeatured(),
+                authorRefs(post),
+                tagRefs(post),
+                MediaRef.of(post.getCoverImage()),
+                post.getWordCount(),
+                post.getReadingTimeMinutes(),
+                post.getPublishedAt(),
+                post.getScheduledAt(),
+                post.getCreatedAt(),
+                post.getUpdatedAt()
+        );
     }
 
-    static List<AuthorRef> authorRefs(Post post) {
-        return post.getAuthors().stream().map(AuthorRef::of).toList();
-    }
+    public static List<AuthorRef> authorRefs(Post post) {
+    return post.getAuthors().stream()
+            .map(AuthorRef::of)
+            .toList();
+}
 
-    /** Tags are a set; sort by name so responses are stable. */
-    static List<TagRef> tagRefs(Post post) {
-        return post.getTags().stream().map(TagRef::of).sorted(Comparator.comparing(TagRef::name)).toList();
+    public static List<TagRef> tagRefs(Post post) {
+        return post.getTags().stream()
+                .sorted(Comparator.comparing(tag -> tag.getName()))
+                .map(TagRef::of)
+                .toList();
     }
 }

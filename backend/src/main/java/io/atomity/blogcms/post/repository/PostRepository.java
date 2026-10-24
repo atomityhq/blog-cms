@@ -1,5 +1,6 @@
 package io.atomity.blogcms.post.repository;
-
+import io.atomity.blogcms.post.entity.PostStatus;
+import java.time.Instant;
 import io.atomity.blogcms.post.entity.Post;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -23,4 +24,9 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
         io.atomity.blogcms.post.entity.PostStatus getStatus();
         Long getCount();
     }
+
+    List<Post> findAllByStatusAndScheduledAtLessThanEqual(
+        PostStatus status,
+        Instant scheduledAt
+    );
 }
