@@ -55,7 +55,7 @@ All under `/api/v1`, JSON in camelCase, wrapped in the response envelope.
 | `GET/POST /authors`, `PUT/DELETE /authors/{id}` | Authors |
 | `GET/POST /tags`, `PUT/DELETE /tags/{id}` | Tags |
 | `GET/POST /media` (multipart `file`), `PATCH/DELETE /media/{id}`, `GET /media/{id}/file` | Image library |
-| `POST /markdown-sources` (multipart `file`), `GET /markdown-sources/{id}/file` | Original `.md` files imported into posts |
+| `POST /markdown-sources` (multipart `file`), `GET /markdown-sources/{id}/file`, `DELETE /markdown-sources/{id}` | Upload, download and delete original `.md` files |
 
 ### Business rules
 
@@ -157,6 +157,67 @@ with the standard error envelope (a malformed UUID on the id route answers
   ]
 }
 ```
+
+### Markdown file deletion
+
+`DELETE /api/v1/markdown-sources/{id}` requires a session. It returns `204` for an
+unused source, `404` for an unknown source, or `409 SOURCE_IN_USE` while any saved
+post references it. Remove the attachment and save those posts first. The editor
+uses this endpoint immediately for an unsaved upload; removing a saved attachment
+continues to take effect when the post is saved.
+
+Deletion has three steps: mark the source as pending in PostgreSQL, delete the
+Nextcloud file, then remove its metadata. The network call runs outside a database
+transaction. A row lock serializes the first step against attaching the source to
+a post. Pending sources cannot be attached or downloaded.
+
+If Nextcloud fails, the endpoint returns `503 MEDIA_STORAGE_UNAVAILABLE` and keeps the
+pending row and storage key. Retry DELETE with the same id. A remote `404` counts
+as success, including when a prior request deleted the remote file but failed to
+remove its database row. The editor keeps the filename visible on failure so
+Remove can be retried. There is no automatic retry job in this change.
+
+Create, update, and duplicate all lock the source before attaching it. Automatic
+cleanup on post replacement, removal, or deletion takes the same lock before
+counting references. Replacements lock both source ids in a consistent order;
+entities loaded before a lock wait are refreshed before checking pending state.
+This prevents attachment/cleanup races from surfacing as foreign-key failures or
+rolling back otherwise valid post changes. Automatic remote cleanup runs only
+after commit and remains best effort; a failure cannot undo the saved post.
+
+The editor disables file actions during a post save. Removing an unsaved source
+treats an API `404` as success, but preserves other failures for retry. Replacement
+uploads the new file first, then deletes the previous unsaved file; if that deletion
+fails, it attempts to delete the new upload and leaves the editor unchanged. A
+saved source remains attached until Save, so discarding an edit remains safe.
+Abandoning the editor without removing an upload still needs a separate cleanup
+policy.
+
+### Markdown lifecycle regression coverage
+
+When changing attachment behavior, check every writer and cleanup entry point,
+including both transaction orderings, rather than testing only the HTTP endpoint.
+
+| Contract | Regression suite |
+| --- | --- |
+| Create/update versus remove/replace/post deletion, either transaction winning | `MarkdownSourceLifecycleRaceTest` |
+| Duplicate versus cleanup, stale pending state, opposite replacements, rollback | `MarkdownSourceLifecycleRaceTest` |
+| Create/update/duplicate reject pending sources | `MarkdownSourceLifecycleRaceTest` |
+| Explicit deletion retries, retained keys, lock waits, network outside transactions | `MarkdownSourceDeletionIntegrationTest` |
+| Authentication, missing/in-use sources, upload and download lifecycle | `MarkdownSourceApiTest` |
+| WebDAV errors, cancellation/timeouts, missing remote files | `NextcloudStorageServiceTest` |
+| Save disables import/replace/remove; Remove handles 404 and failures | `MarkdownSourceBar.test.tsx`, `RichTextEditor.test.tsx` |
+| Unsaved replacement cleanup, compensation, upload failure, saved-file protection | `markdownSourceLifecycle.test.ts` |
+| Busy state during file reading/upload, destroyed editor, single error reporting | `useMarkdownImport.test.tsx` |
+
+Run `make check` with Docker available. `.github/workflows/verify.yml` runs the
+full backend build against PostgreSQL Testcontainers and the frontend lint, types,
+tests, and production build. It also repeats the two database race suites three
+times with fresh test executions. Race tests use latches and observed PostgreSQL
+lock waits to establish ordering; timeouts fail rather than silently skip a case.
+The job summary records complete backend test counts, and the uploaded artifact
+preserves the full-suite XML before race repeats replace the current reports.
+These automated tests do not replace a manual walkthrough against live Nextcloud.
 
 ## Backend layout
 

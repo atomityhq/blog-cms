@@ -33,4 +33,9 @@ public class InMemoryStorageService implements StorageService {
     public void delete(String key) {
         files.remove(key);
     }
+
+    @Override
+    public void deleteRequired(String key) {
+        delete(key);
+    }
 }

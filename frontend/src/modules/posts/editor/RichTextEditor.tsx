@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { MediaPickerModal } from "@/modules/media/MediaPickerModal";
 import type { ContentDoc } from "@/types/content";
@@ -30,11 +31,14 @@ import type { MarkdownSourceRef } from "@/types/markdown";
 import { editorExtensions } from "./extensions";
 import { MarkdownSourceBar } from "./MarkdownSourceBar";
 import { useMarkdownImport } from "./useMarkdownImport";
+import { deleteSourceIfPresent } from "./markdownSourceLifecycle";
 
 export interface RichTextEditorProps {
   value: ContentDoc;
   onChange: (doc: ContentDoc) => void;
   markdownSource: MarkdownSourceRef | null;
+  savedMarkdownSourceId: string | null;
+  disabled?: boolean;
   onMarkdownSourceChange: (source: MarkdownSourceRef | null) => void;
   /** True while an imported file is uploading, so the page can block navigation. */
   onImportingChange: (importing: boolean) => void;
@@ -48,9 +52,13 @@ export function RichTextEditor({
   value,
   onChange,
   markdownSource,
+  savedMarkdownSourceId,
+  disabled = false,
   onMarkdownSourceChange,
   onImportingChange,
 }: RichTextEditorProps) {
+  const toast = useToast();
+  const [removing, setRemoving] = useState(false);
   const editor = useEditor({
     extensions: editorExtensions,
     content: value,
@@ -61,15 +69,38 @@ export function RichTextEditor({
       attributes: { class: "post-content", "aria-label": "Post content", "aria-multiline": "true", role: "textbox" },
     },
   });
-  const markdownImport = useMarkdownImport(editor, onMarkdownSourceChange, onImportingChange);
+  const markdownImport = useMarkdownImport(editor, onMarkdownSourceChange, onImportingChange,
+    markdownSource, savedMarkdownSourceId, disabled);
+
+  const removeSource = async () => {
+    if (!markdownSource || disabled || removing || markdownImport.uploading) return;
+    // A saved source is unlinked on Save so discarding editor changes stays safe.
+    if (markdownSource.id === savedMarkdownSourceId) {
+      onMarkdownSourceChange(null);
+      return;
+    }
+    setRemoving(true);
+    onImportingChange(true);
+    try {
+      await deleteSourceIfPresent(markdownSource.id);
+      onMarkdownSourceChange(null);
+    } catch (error) {
+      // Keep the filename visible so Remove retries a failed Nextcloud deletion.
+      toast.error(error instanceof Error ? error.message : "Couldn't remove the Markdown file. Try again.");
+    } finally {
+      setRemoving(false);
+      onImportingChange(false);
+    }
+  };
 
   return (
     <>
       <MarkdownSourceBar
         source={markdownSource}
-        uploading={markdownImport.uploading}
+        uploading={markdownImport.uploading || removing}
+        disabled={disabled}
         onImport={markdownImport.openFilePicker}
-        onRemove={() => onMarkdownSourceChange(null)}
+        onRemove={() => void removeSource()}
       />
       {markdownImport.ui}
       <div className="rounded-lg border-[1.5px] border-line bg-card shadow-card">

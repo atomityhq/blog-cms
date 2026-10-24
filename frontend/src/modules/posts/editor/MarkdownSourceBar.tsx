@@ -8,18 +8,19 @@ import type { MarkdownSourceRef } from "@/types/markdown";
 interface MarkdownSourceBarProps {
   source: MarkdownSourceRef | null;
   uploading: boolean;
+  disabled?: boolean;
   onImport: () => void;
   onRemove: () => void;
 }
 
 /** Upload section above the editor: the imported .md file, or a button to import one. */
-export function MarkdownSourceBar({ source, uploading, onImport, onRemove }: MarkdownSourceBarProps) {
+export function MarkdownSourceBar({ source, uploading, disabled = false, onImport, onRemove }: MarkdownSourceBarProps) {
   if (!source) {
     return (
       <button
         type="button"
         onClick={onImport}
-        disabled={uploading}
+        disabled={uploading || disabled}
         className="flex w-full cursor-pointer items-center gap-2 rounded-lg border-[1.5px] border-dashed border-line px-3 py-2.5 text-left text-muted transition-colors hover:border-line-strong hover:bg-subtle hover:text-ink disabled:cursor-wait"
       >
         {uploading ? <Spinner size={14} /> : <FileUp size={15} aria-hidden />}
@@ -42,11 +43,11 @@ export function MarkdownSourceBar({ source, uploading, onImport, onRemove }: Mar
       </a>
       <span className="shrink-0 text-[11px] text-muted">{formatBytes(source.sizeBytes)}</span>
       <div className="ml-auto flex shrink-0 gap-1.5">
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onImport} disabled={uploading}>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onImport} disabled={uploading || disabled}>
           {uploading && <Spinner size={12} />}
           Replace
         </button>
-        <button type="button" className="btn btn-sm btn-ghost text-error-text" onClick={onRemove} disabled={uploading}>
+        <button type="button" className="btn btn-sm btn-ghost text-error-text" onClick={onRemove} disabled={uploading || disabled}>
           Remove
         </button>
       </div>

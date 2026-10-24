@@ -6,6 +6,8 @@ import io.atomity.blogcms.shared.ApiException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.Resource;
 
 import java.time.Duration;
@@ -45,6 +47,8 @@ class NextcloudStorageServiceTest {
     private volatile int getFailureStatus;
     private volatile int deleteStatus = 204;
     private volatile int moveStatus = 201;
+    private volatile String stalledMethod;
+    private final CountDownLatch releaseStalledRequest = new CountDownLatch(1);
     private volatile CountDownLatch slowMkcolStarted;
     private volatile CountDownLatch allowSlowMkcolToFinish;
     private final AtomicInteger putRequests = new AtomicInteger();
@@ -77,6 +81,7 @@ class NextcloudStorageServiceTest {
 
     @AfterEach
     void tearDown() {
+        releaseStalledRequest.countDown();
         if (storage != null) {
             storage.close();
         }
@@ -222,6 +227,51 @@ class NextcloudStorageServiceTest {
 
         assertDoesNotThrow(() -> storage.delete("images/test.png"));
         assertTrue(files.containsKey(path));
+    }
+
+    @Test
+    void requiredDeleteReportsFailureAndCanBeRetried() {
+        String path = DAV_ROOT + "/BlogCMS/markdown/test.md";
+        files.put(path, "# Test".getBytes(StandardCharsets.UTF_8));
+        deleteStatus = 500;
+
+        ApiException failure = assertThrows(ApiException.class, () -> storage.deleteRequired("markdown/test.md"));
+        assertEquals(503, failure.getStatus().value());
+        assertTrue(files.containsKey(path));
+
+        deleteStatus = 204;
+        storage.deleteRequired("markdown/test.md");
+        assertFalse(files.containsKey(path));
+    }
+
+    @Test
+    void requiredDeleteAcceptsAnAlreadyMissingRemoteFile() {
+        deleteStatus = 404;
+        assertDoesNotThrow(() -> storage.deleteRequired("markdown/missing.md"));
+    }
+
+    @Test
+    void requiredDeleteMapsTimeoutToStorageUnavailableAndCanBeRetried() {
+        storage.close();
+        storage = new NextcloudStorageService(
+                new StorageProperties("http://localhost:" + server.getAddress().getPort(),
+                        "test-user", "test-password", "/BlogCMS"),
+                Duration.ofSeconds(60), Duration.ofSeconds(2), Duration.ofMillis(200));
+        String path = DAV_ROOT + "/BlogCMS/markdown/stalled.md";
+        files.put(path, new byte[] { 1, 2, 3 });
+        deleteStatus = -1;
+
+        ApiException failure = assertThrows(ApiException.class,
+                () -> storage.deleteRequired("markdown/stalled.md"));
+        assertEquals(503, failure.getStatus().value());
+        assertEquals("MEDIA_STORAGE_UNAVAILABLE", failure.getErrorCode());
+        assertTrue(files.containsKey(path));
+
+        // Best-effort cleanup also absorbs timeouts.
+        assertDoesNotThrow(() -> storage.delete("markdown/stalled.md"));
+        deleteStatus = 204;
+        storage.deleteRequired("markdown/stalled.md");
+        assertFalse(files.containsKey(path));
     }
 
     @Test
@@ -492,6 +542,36 @@ class NextcloudStorageServiceTest {
         assertTrue(exception.getMessage().contains("temporarily unavailable"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"MKCOL", "PROPFIND", "MOVE"})
+    void normalizesTimeoutsAcrossDirectoryAndPublishRequestsAndAllowsRetry(String method) {
+        storage.close();
+        storage = new NextcloudStorageService(
+                new StorageProperties("http://localhost:" + server.getAddress().getPort(),
+                        "test-user", "test-password", "/BlogCMS"),
+                Duration.ofSeconds(60), Duration.ofSeconds(2), Duration.ofMillis(200));
+        if (method.equals("PROPFIND")) {
+            mkcolStatus = 405;
+            collections.add(DAV_ROOT + "/BlogCMS");
+            collections.add(DAV_ROOT + "/BlogCMS/markdown");
+        }
+        stalledMethod = method;
+        try {
+            ApiException failure = assertThrows(ApiException.class,
+                    () -> storage.store("markdown/retry.md", new byte[] { 1, 2, 3 }));
+            assertEquals(503, failure.getStatus().value());
+            assertEquals("MEDIA_STORAGE_UNAVAILABLE", failure.getErrorCode());
+            assertTrue(requests.stream().anyMatch(request -> request.startsWith(method + " ")));
+            assertFalse(files.keySet().stream().anyMatch(path -> path.contains(".uploading")));
+            assertFalse(files.containsKey(DAV_ROOT + "/BlogCMS/markdown/retry.md"));
+        } finally {
+            stalledMethod = null;
+            releaseStalledRequest.countDown();
+        }
+        assertDoesNotThrow(() -> storage.store("markdown/retry.md", new byte[] { 1, 2, 3 }));
+        assertArrayEquals(new byte[] { 1, 2, 3 }, files.get(DAV_ROOT + "/BlogCMS/markdown/retry.md"));
+    }
+
     private void handleWebDav(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         String method = exchange.getRequestMethod();
@@ -503,6 +583,16 @@ class NextcloudStorageServiceTest {
         if (!AUTHORIZATION.equals(exchange.getRequestHeaders()
                 .getFirst("Authorization"))) {
             respond(exchange, 401);
+            return;
+        }
+
+        if (method.equals(stalledMethod)) {
+            try {
+                releaseStalledRequest.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            respond(exchange, 500);
             return;
         }
 
@@ -631,6 +721,15 @@ class NextcloudStorageServiceTest {
             }
 
             case "DELETE" -> {
+                if (deleteStatus < 0) {
+                    try {
+                        Thread.sleep(2_000);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                    respond(exchange, 500);
+                    return;
+                }
                 if (deleteStatus >= 200 && deleteStatus < 300) {
                     files.remove(path);
                 }

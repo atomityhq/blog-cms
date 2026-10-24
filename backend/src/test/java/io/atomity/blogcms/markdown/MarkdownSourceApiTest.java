@@ -159,4 +159,43 @@ class MarkdownSourceApiTest extends IntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].errorCode").value("UNKNOWN_REFERENCE"));
     }
+
+    @Test
+    void deleteRemovesAnUnusedUploadAndRequiresAuthentication() throws Exception {
+        String id = upload("unused.md", MARKDOWN).path("id").asText();
+        String key = repository.findById(UUID.fromString(id)).orElseThrow().getStorageKey();
+        String path = "/api/v1/markdown-sources/" + id;
+
+        mockMvc.perform(delete(path)).andExpect(status().isUnauthorized());
+        assertThat(repository.existsById(UUID.fromString(id))).isTrue();
+        call(delete(path)).andExpect(status().isNoContent());
+        assertThat(repository.existsById(UUID.fromString(id))).isFalse();
+        assertThatThrownBy(() -> storage.load(key)).isInstanceOf(ApiException.class);
+        call(get(path + "/file")).andExpect(status().isNotFound());
+        call(delete(path)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteRefusesSourcesStillUsedByPosts() throws Exception {
+        String id = upload("shared.md", MARKDOWN).path("id").asText();
+        JsonNode original = data(call(post("/api/v1/posts"), postBody("Original", id)).andExpect(status().isCreated()));
+        call(post("/api/v1/posts/" + original.path("id").asText() + "/duplicate"))
+                .andExpect(status().isCreated());
+
+        call(delete("/api/v1/markdown-sources/" + id)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("SOURCE_IN_USE"));
+        call(get("/api/v1/markdown-sources/" + id + "/file")).andExpect(content().bytes(MARKDOWN));
+    }
+
+    @Test
+    void pendingDeletionCannotBeAttachedToAPost() throws Exception {
+        String id = upload("pending.md", MARKDOWN).path("id").asText();
+        var source = repository.findById(UUID.fromString(id)).orElseThrow();
+        source.markDeletionPending();
+        repository.saveAndFlush(source);
+
+        call(post("/api/v1/posts"), postBody("Imported", id)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("SOURCE_DELETION_PENDING"));
+        call(delete("/api/v1/markdown-sources/" + id)).andExpect(status().isNoContent());
+    }
 }

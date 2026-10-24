@@ -6,15 +6,16 @@ import io.atomity.blogcms.markdown.repository.MarkdownSourceRepository;
 import io.atomity.blogcms.media.storage.StorageService;
 import io.atomity.blogcms.shared.ApiException;
 import io.atomity.blogcms.shared.Filenames;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -26,6 +27,8 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 @Service
 public class MarkdownSourceService {
@@ -37,20 +40,67 @@ public class MarkdownSourceService {
 
     private final MarkdownSourceRepository repository;
     private final StorageService storage;
-    private final TransactionTemplate transactionTemplate;
+    private final TransactionTemplate transactions;
+    private final EntityManager entityManager;
 
-    public MarkdownSourceService(
-            MarkdownSourceRepository repository,
-            StorageService storage,
-            PlatformTransactionManager transactionManager) {
+    public MarkdownSourceService(MarkdownSourceRepository repository, StorageService storage,
+                                 PlatformTransactionManager transactionManager, EntityManager entityManager) {
         this.repository = repository;
         this.storage = storage;
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactions = new TransactionTemplate(transactionManager);
+        this.entityManager = entityManager;
     }
 
     @Transactional(readOnly = true)
     public MarkdownSource get(UUID id) {
-        return repository.findById(id).orElseThrow(() -> ApiException.notFound("Markdown file"));
+        return repository.findById(id).filter(source -> !source.isDeletionPending())
+                .orElseThrow(() -> ApiException.notFound("Markdown file"));
+    }
+
+    /** The row lock stays held until the caller's post save commits. */
+    @Transactional
+    public MarkdownSource getForPost(UUID id) {
+        MarkdownSource source = lockSource(id)
+                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
+        if (source.isDeletionPending()) {
+            throw ApiException.conflict("SOURCE_DELETION_PENDING", "This Markdown file is being deleted. Import it again.");
+        }
+        return source;
+    }
+
+    /** Lock both sides of a replacement in the same order, including opposite swaps. */
+    @Transactional
+    public void lockForPostChange(UUID previousId, UUID nextId) {
+        Stream.of(previousId, nextId).filter(java.util.Objects::nonNull).distinct().sorted()
+                .forEach(this::lockSource);
+    }
+
+    private Optional<MarkdownSource> lockSource(UUID id) {
+        return repository.findForUpdate(id).map(source -> {
+            // A post may have loaded this entity before waiting on another transaction.
+            // Refresh after the lock so deletion_pending is not read from a stale entity.
+            entityManager.refresh(source);
+            return source;
+        });
+    }
+
+    /**
+     * Reserve deletion in a short transaction, then contact Nextcloud without a DB
+     * connection. Keep the pending row on failure so retrying DELETE uses the same key.
+     */
+    public void delete(UUID id) {
+        String key = transactions.execute(status -> {
+            MarkdownSource source = lockSource(id)
+                    .orElseThrow(() -> ApiException.notFound("Markdown file"));
+            if (repository.countUsages(id) > 0) {
+                throw ApiException.conflict("SOURCE_IN_USE", "Remove this Markdown file from its posts and save them first.");
+            }
+            source.markDeletionPending();
+            return source.getStorageKey();
+        });
+
+        storage.deleteRequired(key);
+        transactions.executeWithoutResult(status -> repository.deleteById(id));
     }
 
     /**
@@ -59,15 +109,24 @@ public class MarkdownSourceService {
      */
     @Transactional
     public void deleteIfUnused(MarkdownSource source) {
-        if (source == null || repository.countUsages(source.getId()) > 0) {
+        if (source == null) {
             return;
         }
-        repository.delete(source);
-        String key = source.getStorageKey();
+        MarkdownSource locked = lockSource(source.getId()).orElse(null);
+        if (locked == null || repository.countUsages(locked.getId()) > 0) {
+            return;
+        }
+        repository.delete(locked);
+        String key = locked.getStorageKey();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                storage.delete(key);
+                try {
+                    storage.delete(key);
+                } catch (RuntimeException cleanupFailure) {
+                    // The post save is already committed; don't report it as a failed save.
+                    log.warn("Could not clean up an unused Markdown source", cleanupFailure);
+                }
             }
         });
     }
@@ -105,7 +164,7 @@ public class MarkdownSourceService {
 
         storage.store(key, bytes);
         try {
-            MarkdownSourceRef recorded = transactionTemplate.execute(status -> {
+            MarkdownSourceRef recorded = transactions.execute(status -> {
                 MarkdownSource source = repository.save(MarkdownSource.create(id, key, name, bytes.length));
                 log.info("Stored markdown file {} ({} bytes)", source.getId(), bytes.length);
                 return MarkdownSourceRef.of(source);
@@ -114,14 +173,14 @@ public class MarkdownSourceService {
                 throw new IllegalStateException("Markdown record was not saved");
             }
             return recorded;
-        } catch (RuntimeException | Error ex) {
+        } catch (RuntimeException | Error failure) {
             try {
-                storage.delete(key);
-            } catch (RuntimeException | Error cleanupException) {
-                log.warn("Failed to delete stored file {} after a database error", key, cleanupException);
-                ex.addSuppressed(cleanupException);
+                storage.deleteRequired(key);
+            } catch (RuntimeException | Error cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+                log.warn("Could not clean up Markdown upload after a database failure");
             }
-            throw ex;
+            throw failure;
         }
     }
 

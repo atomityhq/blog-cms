@@ -33,4 +33,7 @@ public interface StorageService {
      * @param key relative storage path
      */
     void delete(String key);
+
+    /** Deletes a file or reports a storage failure. An already missing file is a success. */
+    void deleteRequired(String key);
 }

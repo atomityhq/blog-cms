@@ -29,6 +29,9 @@ public class MarkdownSource {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "deletion_pending", nullable = false)
+    private boolean deletionPending;
+
     protected MarkdownSource() {
     }
 
@@ -47,4 +50,6 @@ public class MarkdownSource {
     public String getOriginalFilename() { return originalFilename; }
     public long getSizeBytes() { return sizeBytes; }
     public Instant getCreatedAt() { return createdAt; }
+    public boolean isDeletionPending() { return deletionPending; }
+    public void markDeletionPending() { deletionPending = true; }
 }

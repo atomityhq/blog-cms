@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -98,6 +99,14 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
 
         this.client = RestClient.builder()
                 .requestFactory(requestFactory)
+                .requestInterceptor((request, body, execution) -> {
+                    try {
+                        return execution.execute(request, body);
+                    } catch (CancellationException cancelled) {
+                        // Normalize JDK request-timeout cancellation once for all WebDAV calls.
+                        throw new RestClientException("Nextcloud request was cancelled", cancelled);
+                    }
+                })
                 .defaultHeader(HttpHeaders.AUTHORIZATION, authorizationHeader())
                 .build();
     }
@@ -225,6 +234,16 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
 
     @Override
     public void delete(String key) {
+        try {
+            deleteRequired(key);
+        } catch (ApiException ex) {
+            // Existing image cleanup remains best effort.
+            log.warn("Nextcloud cleanup failed for a stored file");
+        }
+    }
+
+    @Override
+    public void deleteRequired(String key) {
         String path = remotePath(key);
 
         try {
@@ -238,13 +257,12 @@ public class NextcloudStorageService implements StorageService, AutoCloseable {
                         }
 
                         log.warn("Nextcloud deletion failed with HTTP status {}", status);
-                        return null;
+                        throw storageUnavailable();
                     });
         } catch (RestClientException ex) {
-            // Match the existing storage contract: deletion failures do not
-            // undo a database deletion. The remote file may need later cleanup.
             log.warn("Nextcloud deletion failed ({})",
                     ex.getClass().getSimpleName());
+            throw storageUnavailable();
         }
     }
 

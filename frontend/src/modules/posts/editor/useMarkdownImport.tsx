@@ -8,7 +8,7 @@ import { isDocEmpty } from "@/lib/content";
 import { clampHeadingLevels, MARKDOWN_EXTENSIONS, readMarkdownFile, validateMarkdownFile } from "@/lib/markdown-import";
 import type { ContentDoc } from "@/types/content";
 import type { MarkdownSourceRef } from "@/types/markdown";
-import { uploadMarkdownSource } from "../api";
+import { deleteSourceIfPresent, replaceMarkdownSource } from "./markdownSourceLifecycle";
 
 interface ParsedImport {
   file: File;
@@ -20,6 +20,9 @@ export function useMarkdownImport(
   editor: Editor | null,
   onSourceChange: (source: MarkdownSourceRef) => void,
   onImportingChange: (importing: boolean) => void,
+  currentSource: MarkdownSourceRef | null,
+  savedSourceId: string | null,
+  disabled: boolean,
 ) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -33,12 +36,15 @@ export function useMarkdownImport(
 
   // The original file is stored first, so a failed upload leaves the post as it was.
   const apply = async ({ file, doc }: ParsedImport) => {
-    if (!editor) return;
+    if (!editor || disabled) return;
     setImporting(true);
     try {
-      const source = await uploadMarkdownSource(file);
+      const source = await replaceMarkdownSource(file, currentSource, savedSourceId);
       // The page can still be left from outside the guarded links (e.g. the browser's back button).
-      if (editor.isDestroyed) return;
+      if (editor.isDestroyed) {
+        await deleteSourceIfPresent(source.id);
+        return;
+      }
       editor.chain().focus().setContent(doc).run();
       onSourceChange(source);
       toast.success(`Imported "${file.name}".`);
@@ -54,7 +60,7 @@ export function useMarkdownImport(
     const file = event.target.files?.[0];
     // Allows picking the same file again.
     event.target.value = "";
-    if (!file || !editor) return;
+    if (!file || !editor || disabled || uploading) return;
 
     const invalid = validateMarkdownFile(file);
     if (invalid) {
@@ -62,7 +68,7 @@ export function useMarkdownImport(
       return;
     }
 
-    let parsed: ParsedImport;
+    setImporting(true);
     try {
       const markdown = await readMarkdownFile(file);
       if (!editor.markdown) throw new Error("The editor can't read Markdown.");
@@ -73,14 +79,14 @@ export function useMarkdownImport(
         throw new Error(`Couldn't convert "${file.name}" from Markdown.`);
       }
       if (isDocEmpty(doc)) throw new Error(`"${file.name}" has no content to import.`);
-      parsed = { file, doc };
+      const parsed = { file, doc };
+      if (isDocEmpty(editor.getJSON() as ContentDoc)) await apply(parsed).catch(() => {});
+      else setPending(parsed);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `Couldn't import "${file.name}".`);
-      return;
+    } finally {
+      setImporting(false);
     }
-
-    if (isDocEmpty(editor.getJSON() as ContentDoc)) apply(parsed).catch(() => {});
-    else setPending(parsed);
   };
 
   const ui = (
@@ -92,6 +98,7 @@ export function useMarkdownImport(
         className="hidden"
         tabIndex={-1}
         aria-hidden
+        disabled={disabled || uploading}
         onChange={onFileChange}
       />
       {pending && (
@@ -111,5 +118,5 @@ export function useMarkdownImport(
     </>
   );
 
-  return { openFilePicker: () => inputRef.current?.click(), uploading, ui };
+  return { openFilePicker: () => { if (!disabled && !uploading) inputRef.current?.click(); }, uploading, ui };
 }

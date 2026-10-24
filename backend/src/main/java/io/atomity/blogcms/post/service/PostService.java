@@ -3,7 +3,6 @@ package io.atomity.blogcms.post.service;
 import io.atomity.blogcms.author.entity.Author;
 import io.atomity.blogcms.author.repository.AuthorRepository;
 import io.atomity.blogcms.markdown.entity.MarkdownSource;
-import io.atomity.blogcms.markdown.repository.MarkdownSourceRepository;
 import io.atomity.blogcms.markdown.service.MarkdownSourceService;
 import io.atomity.blogcms.media.entity.Media;
 import io.atomity.blogcms.media.repository.MediaRepository;
@@ -48,17 +47,15 @@ public class PostService {
     private final AuthorRepository authorRepository;
     private final TagRepository tagRepository;
     private final MediaRepository mediaRepository;
-    private final MarkdownSourceRepository markdownSourceRepository;
     private final MarkdownSourceService markdownSourceService;
 
     public PostService(PostRepository postRepository, AuthorRepository authorRepository,
                        TagRepository tagRepository, MediaRepository mediaRepository,
-                       MarkdownSourceRepository markdownSourceRepository, MarkdownSourceService markdownSourceService) {
+                       MarkdownSourceService markdownSourceService) {
         this.postRepository = postRepository;
         this.authorRepository = authorRepository;
         this.tagRepository = tagRepository;
         this.mediaRepository = mediaRepository;
-        this.markdownSourceRepository = markdownSourceRepository;
         this.markdownSourceService = markdownSourceService;
     }
 
@@ -112,6 +109,8 @@ public class PostService {
                     "This post was changed somewhere else since you opened it. Reload to get the latest version.");
         }
         MarkdownSource previousSource = post.getMarkdownSource();
+        markdownSourceService.lockForPostChange(previousSource == null ? null : previousSource.getId(),
+                request.markdownSourceId());
         post.edit(resolveEdit(request, id));
         // Flush so the response carries the incremented version.
         PostResponse response = PostResponse.of(postRepository.saveAndFlush(post));
@@ -159,6 +158,9 @@ public class PostService {
     @Transactional
     public PostResponse duplicate(UUID id) {
         Post source = find(id);
+        if (source.getMarkdownSource() != null) {
+            markdownSourceService.getForPost(source.getMarkdownSource().getId());
+        }
         String title = truncate(source.getTitle().isBlank() ? "Untitled (copy)" : source.getTitle() + " (copy)", MAX_TITLE_LENGTH);
         String base = truncate(source.getSlug(), MAX_SLUG_LENGTH - 10) + "-copy";
         String slug = base;
@@ -172,6 +174,7 @@ public class PostService {
     public void delete(UUID id) {
         Post post = find(id);
         MarkdownSource source = post.getMarkdownSource();
+        markdownSourceService.lockForPostChange(source == null ? null : source.getId(), null);
         postRepository.delete(post);
         postRepository.flush();
         markdownSourceService.deleteIfUnused(source);
@@ -192,8 +195,7 @@ public class PostService {
         Media cover = request.coverImageId() == null ? null : mediaRepository.findById(request.coverImageId())
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The cover image does not exist"));
         MarkdownSource markdownSource = request.markdownSourceId() == null ? null
-                : markdownSourceRepository.findById(request.markdownSourceId())
-                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
+                : markdownSourceService.getForPost(request.markdownSourceId());
 
         return new PostEdit(title, resolveSlug(request.slug(), title, selfId), clean(request.excerpt()),
                 request.content(), content.text(), content.wordCount(), content.readingTimeMinutes(),
