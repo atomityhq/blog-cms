@@ -25,6 +25,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -153,6 +155,46 @@ public class PostService {
         post.unpublish();
         return PostResponse.of(postRepository.saveAndFlush(post));
     }
+
+    /** Schedule a post for publication at a future time. */
+@Transactional
+public PostResponse schedule(UUID id, Instant scheduledAt) {
+    if (scheduledAt == null || !scheduledAt.isAfter(Instant.now())) {
+        throw ApiException.badRequest(
+                "VALIDATION_ERROR",
+                "scheduledAt must be a future date and time"
+        );
+    }
+
+    Post post = find(id);
+
+    List<String> missing = new ArrayList<>();
+    if (post.getTitle().isBlank()) {
+        missing.add("a title");
+    }
+    if (post.hasNoContent()) {
+        missing.add("some content");
+    }
+
+    if (!missing.isEmpty()) {
+        throw new ApiException(
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                "NOT_SCHEDULABLE",
+                "Add " + String.join(" and ", missing) + " before scheduling."
+        );
+    }
+
+    post.schedule(scheduledAt);
+    return PostResponse.of(postRepository.saveAndFlush(post));
+}
+
+/** Cancel a scheduled publication and return the post to draft status. */
+@Transactional
+public PostResponse cancelSchedule(UUID id) {
+    Post post = find(id);
+    post.cancelSchedule();
+    return PostResponse.of(postRepository.saveAndFlush(post));
+}
 
     @Transactional
     public PostResponse archive(UUID id) {

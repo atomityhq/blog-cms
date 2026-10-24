@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** A full post, as the editor loads it. */
+
 public record PostResponse(
         UUID id,
         String title,
@@ -26,6 +27,7 @@ public record PostResponse(
         int wordCount,
         int readingTimeMinutes,
         Instant publishedAt,
+        Instant scheduledAt,
         Instant createdAt,
         Instant updatedAt,
         JsonNode content,
@@ -38,11 +40,30 @@ public record PostResponse(
         long version) {
 
     public static PostResponse of(Post post) {
-        return new PostResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getStatus(),
-                post.isFeatured(), PostSummaryResponse.authorRefs(post), PostSummaryResponse.tagRefs(post),
-                MediaRef.of(post.getCoverImage()), post.getWordCount(), post.getReadingTimeMinutes(), post.getPublishedAt(),
-                post.getCreatedAt(), post.getUpdatedAt(), post.getContent(), post.getCoverImageAlt(),
-                MarkdownSourceRef.of(post.getMarkdownSource()), post.getSeoTitle(),
-                post.getMetaDescription(), post.getFocusKeyword(), post.getCanonicalUrl(), post.getVersion());
+        return new PostResponse(
+                post.getId(),
+                post.getTitle(),
+                post.getSlug(),
+                post.getExcerpt(),
+                post.getStatus(),
+                post.isFeatured(),
+                PostSummaryResponse.authorRefs(post),
+                PostSummaryResponse.tagRefs(post),
+                MediaRef.of(post.getCoverImage()),
+                post.getWordCount(),
+                post.getReadingTimeMinutes(),
+                post.getPublishedAt(),
+                post.getScheduledAt(),
+                post.getCreatedAt(),
+                post.getUpdatedAt(),
+                post.getContent(),
+                post.getCoverImageAlt(),
+                MarkdownSourceRef.of(post.getMarkdownSource()),
+                post.getSeoTitle(),
+                post.getMetaDescription(),
+                post.getFocusKeyword(),
+                post.getCanonicalUrl(),
+                post.getVersion()
+        );
     }
 }
