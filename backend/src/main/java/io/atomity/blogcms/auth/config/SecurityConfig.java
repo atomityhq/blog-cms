@@ -48,6 +48,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health/**", "/metrics").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/blogs", "/api/v1/blogs/*").permitAll()
                         // Image files are public so published pages can embed them.
                         .requestMatchers(HttpMethod.GET, "/api/v1/media/*/file").permitAll()
                         // Published blog posts are public so a website can read them without signing in.

@@ -223,8 +223,107 @@ class PostApiTest extends IntegrationTest {
         call(get("/api/v1/posts?sort=title&direction=asc&size=2&page=1"))
                 .andExpect(jsonPath("$.data[0].title").value("Spot instances"));
 
+        call(get("/api/v1/posts?page=2147483647"))
+                .andExpect(status().isBadRequest());
+
         call(get("/api/v1/posts?sort=password")).andExpect(status().isBadRequest());
+        call(get("/api/v1/posts?sort=title&sort=wordCount")).andExpect(status().isBadRequest());
+        call(get("/api/v1/posts?sort=title,asc")).andExpect(status().isBadRequest());
         call(get("/api/v1/posts?status=BOGUS")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void publicBlogListIsUnauthenticatedAndContainsOnlyPublishedPosts() throws Exception {
+        createPost("Draft blog", "Not public.");
+        String published = createPost("Published blog", "Public content.").path("id").asText();
+        call(post("/api/v1/posts/" + published + "/publish")).andExpect(status().isOk());
+        String archived = createPost("Archived blog", "No longer public.").path("id").asText();
+        call(post("/api/v1/posts/" + archived + "/publish")).andExpect(status().isOk());
+        call(post("/api/v1/posts/" + archived + "/archive")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].slug").value("published-blog"))
+                .andExpect(jsonPath("$.data[0].content").doesNotExist())
+                .andExpect(jsonPath("$.data[0].status").doesNotExist())
+                .andExpect(jsonPath("$.data[0].updatedAt").doesNotExist())
+                .andExpect(jsonPath("$.meta.page").value(0))
+                .andExpect(jsonPath("$.meta.size").value(10))
+                .andExpect(jsonPath("$.meta.totalElements").value(1))
+                .andExpect(jsonPath("$.meta.totalPages").value(1));
+    }
+
+    @Test
+    void publicBlogDetailIsUnauthenticatedAndHiddenUnlessPublished() throws Exception {
+        String draft = createPost("Draft blog", "Not public.").path("id").asText();
+        String published = createPost("Public guide", "Full public content.").path("id").asText();
+        call(post("/api/v1/posts/" + published + "/publish")).andExpect(status().isOk());
+        String archived = createPost("Archived blog", "Not public anymore.").path("id").asText();
+        call(post("/api/v1/posts/" + archived + "/publish")).andExpect(status().isOk());
+        call(post("/api/v1/posts/" + archived + "/archive")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs/" + published))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.slug").value("public-guide"))
+                .andExpect(jsonPath("$.data.content.content[0].content[0].text").value("Full public content."))
+                .andExpect(jsonPath("$.data.status").doesNotExist())
+                .andExpect(jsonPath("$.data.version").doesNotExist())
+                .andExpect(jsonPath("$.data.focusKeyword").doesNotExist());
+
+        mockMvc.perform(get("/api/v1/blogs/" + draft))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("NOT_FOUND"));
+        mockMvc.perform(get("/api/v1/blogs/" + archived))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/blogs/00000000-0000-0000-0000-000000000000"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void publicBlogListPaginates() throws Exception {
+        for (String title : List.of("Public one", "Public two", "Public three")) {
+            String id = createPost(title, "Body.").path("id").asText();
+            call(post("/api/v1/posts/" + id + "/publish")).andExpect(status().isOk());
+        }
+
+        mockMvc.perform(get("/api/v1/blogs?page=1&size=2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.meta.page").value(1))
+                .andExpect(jsonPath("$.meta.size").value(2))
+                .andExpect(jsonPath("$.meta.totalElements").value(3))
+                .andExpect(jsonPath("$.meta.totalPages").value(2));
+    }
+
+    @Test
+    void publicBlogListUsesAdminSortAndDirectionParameters() throws Exception {
+        String alpha = createPost("Alpha", "Body.").path("id").asText();
+        String zulu = createPost("Zulu", "Body.").path("id").asText();
+        call(post("/api/v1/posts/" + alpha + "/publish")).andExpect(status().isOk());
+        call(post("/api/v1/posts/" + zulu + "/publish")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs?sort=title&direction=desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].title").value("Zulu"))
+                .andExpect(jsonPath("$.data[1].title").value("Alpha"));
+        mockMvc.perform(get("/api/v1/blogs?sort=title&direction=sideways"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/blogs?sort=title&sort=wordCount&direction=desc"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void publicBlogListDefaultsToNewestFirst() throws Exception {
+        String older = createPost("Older post", "Body.").path("id").asText();
+        call(post("/api/v1/posts/" + older + "/publish")).andExpect(status().isOk());
+        String newer = createPost("Newer post", "Body.").path("id").asText();
+        call(post("/api/v1/posts/" + newer + "/publish")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/blogs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].title").value("Newer post"))
+                .andExpect(jsonPath("$.data[1].title").value("Older post"));
     }
 
     @Test
