@@ -64,6 +64,14 @@ public class MarkdownSourceService {
             }
         });
     }
+    @Transactional
+    public void deleteUnusedById(UUID id) {
+        MarkdownSource source = repository.findById(id).orElse(null);
+        if (source != null) {
+            deleteIfUnused(source);
+        }
+    }
+
 
     /** Stores the file, then records it. The file is removed again if the database write fails. */
     @Transactional
