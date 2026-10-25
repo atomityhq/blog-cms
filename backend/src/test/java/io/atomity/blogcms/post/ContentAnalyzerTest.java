@@ -68,4 +68,30 @@ class ContentAnalyzerTest {
                 .isInstanceOf(ApiException.class).extracting("errorCode").isEqualTo("INVALID_CONTENT");
         assertThatThrownBy(() -> ContentAnalyzer.analyze(parse("[1,2]"))).isInstanceOf(ApiException.class);
     }
+@Test
+void countsWordsSeparatedByUnicodeSpaces() throws Exception {
+    var analysis = ContentAnalyzer.analyze(parse("""
+            {'type':'doc','content':[{'type':'paragraph','content':[
+              {'type':'text','text':'Hello\\u00A0world\\u2003again'}
+            ]}]}
+            """));
+
+    assertThat(analysis.text()).isEqualTo("Hello world again");
+    assertThat(analysis.wordCount()).isEqualTo(3);
+}
+
+@Test
+void unicodeSpacesOnlyContentHasNoWords() throws Exception {
+    var analysis = ContentAnalyzer.analyze(parse("""
+            {'type':'doc','content':[{'type':'paragraph','content':[
+              {'type':'text','text':'\\u00A0\\u2003'}
+            ]}]}
+            """));
+
+    assertThat(analysis.wordCount()).isZero();
+    assertThat(analysis.readingTimeMinutes()).isZero();
+    assertThat(analysis.isEmpty()).isTrue();
+}
+
+
 }
