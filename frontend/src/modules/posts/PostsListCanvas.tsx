@@ -1,9 +1,9 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element -- cover thumbnails are user uploads (data/remote URLs) */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
   Copy,
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { DataTable, type DataTableColumn, type DataTableSort } from "@/components/ui/DataTable";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Menu, type MenuItem } from "@/components/ui/Menu";
@@ -35,31 +35,55 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { listAuthors } from "@/modules/authors/api";
 import { listTags } from "@/modules/tags/api";
-import type { PostSortKey, PostStatus, PostSummary } from "@/types/post";
+import type { PostSortKey, PostSummary } from "@/types/post";
 import { archivePost, countPostsByStatus, deletePost, duplicatePost, listPosts, publishPost, unpublishPost } from "./api";
-
-type StatusTab = PostStatus | "ALL";
+import { listStateToSearch, readListState, type PostsListState, type StatusTab } from "./list-params";
 
 const PAGE_SIZE = 10;
+
+/**
+ * Changes the list's view by rewriting the URL. replaceState updates the current
+ * history entry without a navigation, so filtering doesn't pile up Back steps.
+ */
+function updateView(patch: Partial<PostsListState>) {
+  const current = readListState(new URLSearchParams(window.location.search));
+  const search = listStateToSearch({ ...current, ...patch });
+  if (search !== window.location.search) {
+    window.history.replaceState(null, "", `${window.location.pathname}${search}`);
+  }
+}
 
 export function PostsListCanvas() {
   const router = useRouter();
   const toast = useToast();
 
-  const [tab, setTab] = useState<StatusTab>("ALL");
-  const [query, setQuery] = useState("");
-  const [tagId, setTagId] = useState("");
-  const [authorId, setAuthorId] = useState("");
-  const [sort, setSort] = useState<DataTableSort>({ key: "updatedAt", direction: "desc" });
-  const [page, setPage] = useState(0);
+  // The view lives in the URL, so coming back to the list, reloading it or sharing
+  // the link shows the same tab, filters, sort and page.
+  const searchParams = useSearchParams();
+  const { tab, query: urlQuery, tagId, authorId, sort, page } = readListState(searchParams);
+  const [query, setQuery] = useState(urlQuery);
   const [pendingDelete, setPendingDelete] = useState<PostSummary | null>(null);
   const debouncedQuery = useDebouncedValue(query);
+
+  // Typing stays local; the URL (and so the list) follows once the text settles.
+  useEffect(() => {
+    if (debouncedQuery !== readListState(new URLSearchParams(window.location.search)).query) {
+      updateView({ query: debouncedQuery, page: 0 });
+    }
+  }, [debouncedQuery]);
+
+  // A navigation can change the search too (e.g. the sidebar's Posts link) — show it in the box.
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery);
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery);
+    if (urlQuery !== debouncedQuery) setQuery(urlQuery);
+  }
 
   const posts = useAsync(
     () =>
       listPosts({
         status: tab === "ALL" ? undefined : tab,
-        q: debouncedQuery,
+        q: urlQuery,
         tagId: tagId || undefined,
         authorId: authorId || undefined,
         sort: sort.key as PostSortKey,
@@ -67,17 +91,13 @@ export function PostsListCanvas() {
         page,
         size: PAGE_SIZE,
       }),
-    [tab, debouncedQuery, tagId, authorId, sort, page],
+    [tab, urlQuery, tagId, authorId, sort.key, sort.direction, page],
   );
   const counts = useAsync(countPostsByStatus, []);
   const authors = useAsync(listAuthors, []);
   const tags = useAsync(listTags, []);
 
   const hasFilters = Boolean(query || tagId || authorId);
-  const resetPage = <T,>(setter: (value: T) => void) => (value: T) => {
-    setter(value);
-    setPage(0);
-  };
 
   const refresh = () => {
     posts.reload();
@@ -205,11 +225,10 @@ export function PostsListCanvas() {
   ];
 
   const onSortChange = (key: string) => {
-    setSort((current) => ({
-      key,
-      direction: current.key === key && current.direction === "desc" ? "asc" : key === "title" ? "asc" : "desc",
-    }));
-    setPage(0);
+    updateView({
+      sort: { key, direction: sort.key === key && sort.direction === "desc" ? "asc" : key === "title" ? "asc" : "desc" },
+      page: 0,
+    });
   };
 
   const rows = posts.data?.items ?? [];
@@ -233,7 +252,7 @@ export function PostsListCanvas() {
           <Tabs<StatusTab>
             label="Filter by status"
             value={tab}
-            onChange={resetPage(setTab)}
+            onChange={(value) => updateView({ tab: value, page: 0 })}
             items={[
               { key: "ALL", label: "All", count: counts.data?.ALL },
               { key: "DRAFT", label: "Drafts", count: counts.data?.DRAFT },
@@ -245,19 +264,19 @@ export function PostsListCanvas() {
 
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-3.5 py-3">
           <div className="min-w-[220px] flex-1">
-            <SearchInput label="Search posts" placeholder="Search title, slug or content" value={query} onChange={resetPage(setQuery)} />
+            <SearchInput label="Search posts" placeholder="Search title, slug or content" value={query} onChange={setQuery} />
           </div>
           <Select
             aria-label="Filter by author"
             value={authorId}
-            onChange={(e) => resetPage(setAuthorId)(e.target.value)}
+            onChange={(e) => updateView({ authorId: e.target.value, page: 0 })}
             className="w-[170px]"
             options={[{ value: "", label: "All authors" }, ...(authors.data ?? []).map((a) => ({ value: a.id, label: a.name }))]}
           />
           <Select
             aria-label="Filter by tag"
             value={tagId}
-            onChange={(e) => resetPage(setTagId)(e.target.value)}
+            onChange={(e) => updateView({ tagId: e.target.value, page: 0 })}
             className="w-[160px]"
             options={[{ value: "", label: "All tags" }, ...(tags.data ?? []).map((t) => ({ value: t.id, label: t.name }))]}
           />
@@ -267,9 +286,7 @@ export function PostsListCanvas() {
               className="btn btn-ghost btn-sm"
               onClick={() => {
                 setQuery("");
-                setTagId("");
-                setAuthorId("");
-                setPage(0);
+                updateView({ query: "", tagId: "", authorId: "", page: 0 });
               }}
             >
               Clear filters
@@ -315,7 +332,7 @@ export function PostsListCanvas() {
 
         {posts.data && posts.data.meta.totalElements > 0 && (
           <div className="border-t border-line px-3.5 py-2">
-            <Pagination meta={posts.data.meta} onPageChange={setPage} noun="posts" />
+            <Pagination meta={posts.data.meta} onPageChange={(value) => updateView({ page: value })} noun="posts" />
           </div>
         )}
       </div>
