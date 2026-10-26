@@ -85,6 +85,16 @@ export function inputFromForm(form: EditorForm): PostInput {
   };
 }
 
+/**
+ * The form to show once a save comes back. `sent` is the form the save sent, `current` is
+ * what's on screen now — it may have changed while the request was in flight, and those
+ * edits must stay. Only the slug comes from the server, and only if it hasn't changed since.
+ */
+export function mergeSavedForm(current: EditorForm, sent: EditorForm, savedSlug: string): EditorForm {
+  if (current.slug !== sent.slug || current.slug === savedSlug) return current;
+  return { ...current, slug: savedSlug };
+}
+
 /** Client-side checks run before saving; the API repeats them. */
 export function validateForm(form: EditorForm): FormErrors {
   const errors: FormErrors = {};

@@ -21,7 +21,7 @@ import { ApiError } from "@/types/api";
 import { POST_LIMITS, type Post } from "@/types/post";
 import { archivePost, createPost, deletePost, duplicatePost, getPost, publishPost, unpublishPost, updatePost } from "../api";
 import { EditorSidebar, type EditorMeta } from "./EditorSidebar";
-import { EMPTY_FORM, formFromPost, inputFromForm, validateForm, type EditorForm } from "./form";
+import { EMPTY_FORM, formFromPost, inputFromForm, mergeSavedForm, validateForm, type EditorForm } from "./form";
 import { RichTextEditor } from "./RichTextEditor";
 
 /** Route entry: loads the post (or starts a blank one), then hands over to the editor. */
@@ -119,15 +119,16 @@ function PostEditor({ initial }: { initial: Post | null }) {
       toast.error("Fix the highlighted fields before saving.");
       return null;
     }
-    const input = inputFromForm(form);
+    const sent = form;
+    const input = inputFromForm(sent);
     setBusy("save");
     try {
       const saved = post ? await updatePost(post.id, input, post.version) : await createPost(input);
       setPost(saved);
-      // The server may have filled in a slug; keep the form in step so it isn't dirty.
-      const nextForm = { ...form, slug: saved.slug };
-      setForm(nextForm);
-      setSavedSnapshot(JSON.stringify(nextForm));
+      // The snapshot is what the server now has. The form keeps anything typed during the
+      // request, so those edits still count as unsaved; the server may have filled in a slug.
+      setForm((current) => mergeSavedForm(current, sent, saved.slug));
+      setSavedSnapshot(JSON.stringify({ ...sent, slug: saved.slug }));
       setShowErrors(false);
       if (!options.quiet) toast.success(post ? "Changes saved." : "Draft created.");
       if (!post) router.replace(`/posts/${saved.id}`);
