@@ -23,7 +23,7 @@ public final class ContentAnalyzer {
 
     private static final Set<String> BLOCK_TYPES =
             Set.of("paragraph", "heading", "blockquote", "listItem", "codeBlock", "bulletList", "orderedList");
-    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s\\p{Z}]+");
     /** Links may point to the web, an email address, or a path/anchor on the same site. */
     private static final Pattern SAFE_LINK = Pattern.compile("^(https?://|mailto:|/|#).*", Pattern.CASE_INSENSITIVE);
     /** Images must come from the web or this server's media endpoint — never data: or javascript: URLs. */
