@@ -28,6 +28,9 @@ import java.time.ZonedDateTime;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 @Service
@@ -60,19 +63,39 @@ public class MarkdownSourceService {
     /** The row lock stays held until the caller's post save commits. */
     @Transactional
     public MarkdownSource getForPost(UUID id) {
-        MarkdownSource source = lockSource(id)
-                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
+        return requireAttachable(lockSource(id));
+    }
+
+    private MarkdownSource requireAttachable(Optional<MarkdownSource> candidate) {
+        MarkdownSource source = candidate.orElseThrow(() ->
+                ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
         if (source.isDeletionPending()) {
             throw ApiException.conflict("SOURCE_DELETION_PENDING", "This Markdown file is being deleted. Import it again.");
         }
         return source;
     }
 
+    /** An unchanged saved reference already protects its source from deletion. */
+    @Transactional
+    public MarkdownSource getForPostChange(UUID previousId, UUID nextId) {
+        if (Objects.equals(previousId, nextId)) {
+            return nextId == null ? null : requireAttachable(repository.findById(nextId));
+        }
+        Map<UUID, MarkdownSource> locked = lockSources(previousId, nextId);
+        return nextId == null ? null : requireAttachable(Optional.ofNullable(locked.get(nextId)));
+    }
+
     /** Lock both sides of a replacement in the same order, including opposite swaps. */
     @Transactional
     public void lockForPostChange(UUID previousId, UUID nextId) {
-        Stream.of(previousId, nextId).filter(java.util.Objects::nonNull).distinct().sorted()
-                .forEach(this::lockSource);
+        lockSources(previousId, nextId);
+    }
+
+    private Map<UUID, MarkdownSource> lockSources(UUID previousId, UUID nextId) {
+        Map<UUID, MarkdownSource> locked = new HashMap<>();
+        Stream.of(previousId, nextId).filter(Objects::nonNull).distinct().sorted()
+                .forEach(id -> lockSource(id).ifPresent(source -> locked.put(id, source)));
+        return locked;
     }
 
     private Optional<MarkdownSource> lockSource(UUID id) {
@@ -93,14 +116,14 @@ public class MarkdownSourceService {
             MarkdownSource source = lockSource(id)
                     .orElseThrow(() -> ApiException.notFound("Markdown file"));
             if (repository.countUsages(id) > 0) {
-                throw ApiException.conflict("SOURCE_IN_USE", "Remove this Markdown file from its posts and save them first.");
+                throw ApiException.conflict("MARKDOWN_SOURCE_IN_USE", "Remove this Markdown file from its posts and save them first.");
             }
             source.markDeletionPending();
             return source.getStorageKey();
         });
 
         storage.deleteRequired(key);
-        transactions.executeWithoutResult(status -> repository.deleteById(id));
+        transactions.executeWithoutResult(status -> repository.deletePendingById(id));
     }
 
     /**

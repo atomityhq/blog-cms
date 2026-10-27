@@ -109,9 +109,9 @@ public class PostService {
                     "This post was changed somewhere else since you opened it. Reload to get the latest version.");
         }
         MarkdownSource previousSource = post.getMarkdownSource();
-        markdownSourceService.lockForPostChange(previousSource == null ? null : previousSource.getId(),
-                request.markdownSourceId());
-        post.edit(resolveEdit(request, id));
+        MarkdownSource nextSource = markdownSourceService.getForPostChange(
+                previousSource == null ? null : previousSource.getId(), request.markdownSourceId());
+        post.edit(resolveEdit(request, id, nextSource));
         // Flush so the response carries the incremented version.
         PostResponse response = PostResponse.of(postRepository.saveAndFlush(post));
         // A replaced or removed .md file is deleted once nothing else uses it.
@@ -186,6 +186,12 @@ public class PostService {
 
     /** Validates the request against the database and turns it into a resolved edit. */
     private PostEdit resolveEdit(PostRequest request, UUID selfId) {
+        MarkdownSource source = request.markdownSourceId() == null ? null
+                : markdownSourceService.getForPost(request.markdownSourceId());
+        return resolveEdit(request, selfId, source);
+    }
+
+    private PostEdit resolveEdit(PostRequest request, UUID selfId, MarkdownSource markdownSource) {
         String title = clean(request.title());
         ContentAnalyzer.Analysis content = ContentAnalyzer.analyze(request.content());
 
@@ -194,8 +200,6 @@ public class PostService {
         List<Media> inlineImages = resolveOrdered(content.imageIds(), mediaRepository::findAllById, Media::getId, "image");
         Media cover = request.coverImageId() == null ? null : mediaRepository.findById(request.coverImageId())
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The cover image does not exist"));
-        MarkdownSource markdownSource = request.markdownSourceId() == null ? null
-                : markdownSourceService.getForPost(request.markdownSourceId());
 
         return new PostEdit(title, resolveSlug(request.slug(), title, selfId), clean(request.excerpt()),
                 request.content(), content.text(), content.wordCount(), content.readingTimeMinutes(),

@@ -183,7 +183,7 @@ class MarkdownSourceApiTest extends IntegrationTest {
                 .andExpect(status().isCreated());
 
         call(delete("/api/v1/markdown-sources/" + id)).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errors[0].errorCode").value("SOURCE_IN_USE"));
+                .andExpect(jsonPath("$.errors[0].errorCode").value("MARKDOWN_SOURCE_IN_USE"));
         call(get("/api/v1/markdown-sources/" + id + "/file")).andExpect(content().bytes(MARKDOWN));
     }
 

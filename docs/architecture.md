@@ -161,7 +161,7 @@ with the standard error envelope (a malformed UUID on the id route answers
 ### Markdown file deletion
 
 `DELETE /api/v1/markdown-sources/{id}` requires a session. It returns `204` for an
-unused source, `404` for an unknown source, or `409 SOURCE_IN_USE` while any saved
+unused source, `404` for an unknown source, or `409 MARKDOWN_SOURCE_IN_USE` while any saved
 post references it. Remove the attachment and save those posts first. The editor
 uses this endpoint immediately for an unsaved upload; removing a saved attachment
 continues to take effect when the post is saved.
@@ -174,10 +174,14 @@ a post. Pending sources cannot be attached or downloaded.
 If Nextcloud fails, the endpoint returns `503 MEDIA_STORAGE_UNAVAILABLE` and keeps the
 pending row and storage key. Retry DELETE with the same id. A remote `404` counts
 as success, including when a prior request deleted the remote file but failed to
-remove its database row. The editor keeps the filename visible on failure so
+remove its database row. Final metadata removal is an atomic conditional delete;
+concurrent requests that already reserved deletion may both finish successfully even
+when one removes the row first. An initially unknown id still returns 404. The editor keeps the filename visible on failure so
 Remove can be retried. There is no automatic retry job in this change.
 
-Create, update, and duplicate all lock the source before attaching it. Automatic
+Create, attachment-changing updates, and duplicate lock the source before attaching it.
+An update retaining the same saved source validates it without a pessimistic lock;
+replacement reuses the source locked in sorted order instead of locking it again. Automatic
 cleanup on post replacement, removal, or deletion takes the same lock before
 counting references. Replacements lock both source ids in a consistent order;
 entities loaded before a lock wait are refreshed before checking pending state.
@@ -185,7 +189,9 @@ This prevents attachment/cleanup races from surfacing as foreign-key failures or
 rolling back otherwise valid post changes. Automatic remote cleanup runs only
 after commit and remains best effort; a failure cannot undo the saved post.
 
-The editor disables file actions during a post save. Removing an unsaved source
+The editor disables file actions during a post save. If Save starts while the import
+confirmation is already open, confirming reports the busy state and keeps the dialog
+and pending file available for retry after Save; it cannot silently close as a success. Removing an unsaved source
 treats an API `404` as success, but preserves other failures for retry. Replacement
 uploads the new file first, then deletes the previous unsaved file; if that deletion
 fails, it attempts to delete the new upload and leaves the editor unchanged. A
@@ -203,12 +209,13 @@ including both transaction orderings, rather than testing only the HTTP endpoint
 | Create/update versus remove/replace/post deletion, either transaction winning | `MarkdownSourceLifecycleRaceTest` |
 | Duplicate versus cleanup, stale pending state, opposite replacements, rollback | `MarkdownSourceLifecycleRaceTest` |
 | Create/update/duplicate reject pending sources | `MarkdownSourceLifecycleRaceTest` |
-| Explicit deletion retries, retained keys, lock waits, network outside transactions | `MarkdownSourceDeletionIntegrationTest` |
+| Explicit deletion retries, simultaneous same-id deletes in either completion order, retained keys, lock waits, network outside transactions | `MarkdownSourceDeletionIntegrationTest` |
 | Authentication, missing/in-use sources, upload and download lifecycle | `MarkdownSourceApiTest` |
 | WebDAV errors, cancellation/timeouts, missing remote files | `NextcloudStorageServiceTest` |
 | Save disables import/replace/remove; Remove handles 404 and failures | `MarkdownSourceBar.test.tsx`, `RichTextEditor.test.tsx` |
 | Unsaved replacement cleanup, compensation, upload failure, saved-file protection | `markdownSourceLifecycle.test.ts` |
 | Busy state during file reading/upload, destroyed editor, single error reporting | `useMarkdownImport.test.tsx` |
+| Open import dialog followed by Ctrl/Cmd+S, blocked confirmation, retry after save | `useMarkdownImport.dialog.test.tsx` (React DOM and jsdom) |
 
 Run `make check` with Docker available. `.github/workflows/verify.yml` runs the
 full backend build against PostgreSQL Testcontainers and the frontend lint, types,

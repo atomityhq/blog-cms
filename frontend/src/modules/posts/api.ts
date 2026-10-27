@@ -77,7 +77,7 @@ export async function uploadMarkdownSource(file: File): Promise<MarkdownSourceRe
   return (await apiRequest<MarkdownSourceRef>("/markdown-sources", { method: "POST", body: form })).data;
 }
 
-/** DELETE /api/v1/markdown-sources/{id} — only sources not referenced by a saved post. */
+/** DELETE /api/v1/markdown-sources/{id} — refused (409) while a post still uses the file. */
 export async function deleteMarkdownSource(id: string): Promise<void> {
   await api("DELETE", `/markdown-sources/${id}`);
 }

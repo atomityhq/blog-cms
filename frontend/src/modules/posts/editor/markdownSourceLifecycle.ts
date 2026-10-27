@@ -18,7 +18,7 @@ export async function replaceMarkdownSource(
   savedId: string | null,
 ): Promise<MarkdownSourceRef> {
   const next = await uploadMarkdownSource(file);
-  if (previous && previous.id !== savedId) {
+  if (isUnsavedUpload(previous, savedId)) {
     try {
       await deleteSourceIfPresent(previous.id);
     } catch (failure) {
@@ -32,4 +32,16 @@ export async function replaceMarkdownSource(
     }
   }
   return next;
+}
+
+/**
+ * Whether `source` is an upload this session that was never saved on the post, so it's
+ * ours to delete immediately. A source that matches the post's saved attachment is left
+ * for `deleteIfUnused` to clean up once the change (replacement or removal) is saved.
+ */
+export function isUnsavedUpload(
+  source: MarkdownSourceRef | null,
+  savedSourceId: string | null,
+): source is MarkdownSourceRef {
+  return source !== null && source.id !== savedSourceId;
 }

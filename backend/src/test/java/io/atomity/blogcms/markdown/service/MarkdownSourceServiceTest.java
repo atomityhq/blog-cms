@@ -43,7 +43,7 @@ class MarkdownSourceServiceTest {
         order.verify(repository).countUsages(source.getId());
         order.verify(manager).commit(any());
         order.verify(storage).deleteRequired(source.getStorageKey());
-        order.verify(repository).deleteById(source.getId());
+        order.verify(repository).deletePendingById(source.getId());
         order.verify(manager).commit(any());
     }
 
@@ -51,10 +51,10 @@ class MarkdownSourceServiceTest {
     void linkedSourceCannotBeDeleted() {
         when(repository.countUsages(source.getId())).thenReturn(2L);
         assertThatThrownBy(() -> service.delete(source.getId()))
-                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo("SOURCE_IN_USE"));
+                .isInstanceOfSatisfying(ApiException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo("MARKDOWN_SOURCE_IN_USE"));
         assertThat(source.isDeletionPending()).isFalse();
         verifyNoInteractions(storage);
-        verify(repository, never()).deleteById(any());
+        verify(repository, never()).deletePendingById(any());
     }
 
     @Test
@@ -64,17 +64,17 @@ class MarkdownSourceServiceTest {
 
         assertThatThrownBy(() -> service.delete(source.getId())).isSameAs(unavailable);
         assertThat(source.isDeletionPending()).isTrue();
-        verify(repository, never()).deleteById(any());
+        verify(repository, never()).deletePendingById(any());
 
         service.delete(source.getId());
         verify(storage, times(2)).deleteRequired(source.getStorageKey());
-        verify(repository).deleteById(source.getId());
+        verify(repository).deletePendingById(source.getId());
     }
 
     @Test
     void databaseFailureAfterRemoteDeleteCanBeRetried() {
-        doThrow(new IllegalStateException("database unavailable")).doNothing()
-                .when(repository).deleteById(source.getId());
+        when(repository.deletePendingById(source.getId()))
+                .thenThrow(new IllegalStateException("database unavailable")).thenReturn(1);
         assertThatThrownBy(() -> service.delete(source.getId())).hasMessage("database unavailable");
         assertThat(source.isDeletionPending()).isTrue();
         service.delete(source.getId());
@@ -210,6 +210,32 @@ class MarkdownSourceServiceTest {
         } finally {
             org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
         }
+    }
+
+    @Test
+    void overlappingDeleteCleanupAcceptsAnAlreadyRemovedPendingRow() {
+        when(repository.deletePendingById(source.getId())).thenReturn(0);
+        assertThatCode(() -> service.delete(source.getId())).doesNotThrowAnyException();
+        verify(storage).deleteRequired(source.getStorageKey());
+        verify(repository).deletePendingById(source.getId());
+    }
+
+    @Test
+    void unchangedSavedSourceDoesNotAcquireAPessimisticLock() {
+        when(repository.findById(source.getId())).thenReturn(Optional.of(source));
+        assertThat(service.getForPostChange(source.getId(), source.getId())).isSameAs(source);
+        verify(repository, never()).findForUpdate(any());
+        verifyNoInteractions(entityManager);
+    }
+
+    @Test
+    void replacementResolvesTheNewSourceWithoutLockingItTwice() {
+        UUID previousId = new UUID(0, 1);
+        when(repository.findForUpdate(previousId)).thenReturn(Optional.empty());
+        assertThat(service.getForPostChange(previousId, source.getId())).isSameAs(source);
+        verify(repository, times(1)).findForUpdate(previousId);
+        verify(repository, times(1)).findForUpdate(source.getId());
+        verify(repository, never()).findById(any());
     }
 
     private static MockMultipartFile file() {

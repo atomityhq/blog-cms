@@ -36,7 +36,14 @@ export function useMarkdownImport(
 
   // The original file is stored first, so a failed upload leaves the post as it was.
   const apply = async ({ file, doc }: ParsedImport) => {
-    if (!editor || disabled) return;
+    if (!editor || disabled) {
+      const message = disabled
+        ? "Wait for the post to finish saving, then confirm the import again."
+        : "The editor is unavailable. Reopen the post before importing.";
+      toast.error(message);
+      // ConfirmDialog closes only on resolution. Reject so the pending file stays retryable.
+      throw new Error(message);
+    }
     setImporting(true);
     try {
       const source = await replaceMarkdownSource(file, currentSource, savedSourceId);

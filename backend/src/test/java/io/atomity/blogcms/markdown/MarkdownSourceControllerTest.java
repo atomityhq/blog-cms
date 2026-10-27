@@ -38,9 +38,9 @@ class MarkdownSourceControllerTest {
 
     @Test
     void referencedSourceReturnsConflictEnvelope() throws Exception {
-        doThrow(ApiException.conflict("SOURCE_IN_USE", "Still used" )).when(service).delete(id);
+        doThrow(ApiException.conflict("MARKDOWN_SOURCE_IN_USE", "Still used" )).when(service).delete(id);
         mvc.perform(delete("/api/v1/markdown-sources/" + id))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.errors[0].errorCode").value("SOURCE_IN_USE"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.errors[0].errorCode").value("MARKDOWN_SOURCE_IN_USE"));
     }
 
     @Test
