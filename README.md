@@ -157,7 +157,10 @@ With the defaults from `.env.example` you sign in as **admin@example.com / admin
 
 Requires **Java 21**, **Node.js ≥ 20.9** with **npm ≥ 11.16**, and Docker (for Postgres and backend tests).
 
+Create the root environment file and configure `NEXTCLOUD_URL`, `NEXTCLOUD_USERNAME`, and `NEXTCLOUD_PASSWORD` with a valid Nextcloud instance. The local backend needs these settings for media storage; the placeholders in `.env.example` are not usable credentials.
+
 ```bash
+cp .env.example .env
 make db                                   # start Postgres only
 make backend                              # Spring Boot on :8080 (profile: local)
 
