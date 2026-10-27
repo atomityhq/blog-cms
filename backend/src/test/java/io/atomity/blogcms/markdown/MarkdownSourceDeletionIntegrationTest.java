@@ -221,6 +221,8 @@ class MarkdownSourceDeletionIntegrationTest extends IntegrationTest {
                 finishStorage.countDown();
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
                 while (System.nanoTime() < deadline) {
+                    // PostgreSQL caches activity snapshots within this held transaction.
+                    jdbc.execute("SELECT pg_stat_clear_snapshot()");
                     Long waiting = jdbc.queryForObject("""
                             SELECT count(*) FROM pg_stat_activity
                             WHERE cardinality(pg_blocking_pids(pid)) > 0
