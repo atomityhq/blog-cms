@@ -68,4 +68,36 @@ class ContentAnalyzerTest {
                 .isInstanceOf(ApiException.class).extracting("errorCode").isEqualTo("INVALID_CONTENT");
         assertThatThrownBy(() -> ContentAnalyzer.analyze(parse("[1,2]"))).isInstanceOf(ApiException.class);
     }
+
+    @Test
+    void collectsLibraryImagesWhenMediaIdIsMissing() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        var analysis = ContentAnalyzer.analyze(parse(
+            "{'type':'doc','content':["
+                + "{'type':'image','attrs':{"
+                + "'src':'/api/v1/media/" + id + "/file'"
+                + "}}"
+                + "]}"));
+
+        assertThat(analysis.imageIds()).containsExactly(id);
+    }
+
+
+    @Test
+    void collectsLibraryImagesFromAbsoluteUrlWhenMediaIdIsMissing()
+        throws Exception {
+        UUID id = UUID.randomUUID();
+
+        var analysis = ContentAnalyzer.analyze(parse(
+            "{'type':'doc','content':["
+                + "{'type':'image','attrs':{"
+                + "'src':'https://example.com/api/v1/media/"
+                + id + "/file'"
+                + "}}"
+                + "]}"));
+
+        assertThat(analysis.imageIds()).containsExactly(id);
+    }
+
 }
