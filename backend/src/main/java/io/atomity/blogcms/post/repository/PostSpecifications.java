@@ -34,7 +34,9 @@ public final class PostSpecifications {
 
     /**
      * Case-insensitive substring match on title, excerpt, slug and body text. Uses ILIKE,
-     * which the pg_trgm indexes from V1 can serve.
+     * which the pg_trgm indexes on those columns serve (V1, and V3 for slug). Every column
+     * searched here needs such an index: with one missing, PostgreSQL can't use any of them
+     * for the OR and reads the whole posts table (see PostSearchIndexTest).
      */
     public static Specification<Post> matches(String q) {
         if (q == null || q.isBlank()) {
