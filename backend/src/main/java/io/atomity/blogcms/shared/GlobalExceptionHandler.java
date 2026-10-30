@@ -64,14 +64,32 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(apiError("FILE_TOO_LARGE", "The file is larger than the upload limit")));
     }
 
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Object>> handleValidation(MethodArgumentNotValidException ex) {
-        String detail = ex.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getField() + " " + error.getDefaultMessage())
+
+        boolean hasBindingFailure = ex.getBindingResult().getFieldErrors()
+            .stream()
+            .anyMatch(error -> error.isBindingFailure());
+
+        if (hasBindingFailure) {
+            String detail = ex.getBindingResult().getFieldErrors().stream()
+                .filter(error -> error.isBindingFailure())
+                .map(error -> "Invalid value for '" + error.getField() + "'")
                 .collect(Collectors.joining("; "));
+
+            return ResponseEntity.badRequest()
+                .body(ApiResponse.error(apiError("BAD_REQUEST", detail)));
+        }
+
+        String detail = ex.getBindingResult().getFieldErrors().stream()
+            .map(error -> error.getField() + " " + error.getDefaultMessage())
+            .collect(Collectors.joining("; "));
+
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("VALIDATION_ERROR", detail)));
+            .body(ApiResponse.error(apiError("VALIDATION_ERROR", detail)));
     }
+
 
     /** Query parameters bound to an object (e.g. ?status=BOGUS on the posts list). */
     @ExceptionHandler(BindException.class)
