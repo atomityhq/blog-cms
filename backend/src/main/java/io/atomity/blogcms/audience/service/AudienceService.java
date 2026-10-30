@@ -37,6 +37,13 @@ public class AudienceService {
                 .toList();
     }
 
+    @Transactional
+    public AudienceResponse update(UUID id, AudienceRequest request) {
+        Audience audience = audienceRepository.findById(id).orElseThrow(() -> ApiException.notFound("Audience"));
+        audience.rename(request.name(), resolveSlug(request, id));
+        return AudienceResponse.of(audience, audienceRepository.countPosts(id));
+    }
+
     private String resolveSlug(AudienceRequest request, UUID selfId) {
         String slug = request.slug() == null || request.slug().isBlank() ? Slugs.slugify(request.name()) : request.slug();
         if (slug.isEmpty()) {

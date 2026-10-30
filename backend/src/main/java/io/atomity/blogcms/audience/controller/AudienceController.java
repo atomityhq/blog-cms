@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
 import java.util.List;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/audiences")
@@ -31,6 +34,11 @@ public class AudienceController {
     @GetMapping
     public ApiResponse<List<AudienceResponse>> list() {
         return ApiResponse.ok(audienceService.list());
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<AudienceResponse> update(@PathVariable UUID id, @Valid @RequestBody AudienceRequest request) {
+        return ApiResponse.ok(audienceService.update(id, request));
     }
 
 }
