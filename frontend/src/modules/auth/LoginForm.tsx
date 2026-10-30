@@ -4,11 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
-
-/** Only same-site paths are honoured for `?next=`, so the login page can't be used as an open redirect. */
-function safeNext(next: string | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/posts";
-}
+import { safeNext } from "@/lib/safe-next";
 
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
