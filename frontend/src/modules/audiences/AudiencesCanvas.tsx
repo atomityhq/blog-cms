@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { EllipsisVertical, Pencil, Plus, UsersRound as AudienceIcon } from "lucide-react";
+import { EllipsisVertical, Pencil, Plus, Trash2, UsersRound as AudienceIcon } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -13,16 +14,17 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { useAsync } from "@/hooks/useAsync";
-import { formatDate } from "@/lib/format";
+import { formatDate, pluralize } from "@/lib/format";
 import { slugify } from "@/lib/slug";
 import type { Audience } from "@/types/audience";
-import { createAudience, listAudiences, updateAudience } from "./api";
+import { createAudience, deleteAudience, listAudiences, updateAudience } from "./api";
 
 export function AudiencesCanvas() {
   const toast = useToast();
   const audiences = useAsync(listAudiences, []);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Audience | "new" | null>(null);
+  const [deleting, setDeleting] = useState<Audience | null>(null);
 
   const needle = query.trim().toLowerCase();
   const rows = (audiences.data ?? []).filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.slug.includes(needle));
@@ -59,6 +61,7 @@ export function AudiencesCanvas() {
           <Menu
             items={[
               { label: "Rename", icon: Pencil, onSelect: () => setEditing(audience) },
+              { label: "Delete", icon: Trash2, danger: true, onSelect: () => setDeleting(audience) },
             ]}
             trigger={(props) => (
               <button
@@ -133,7 +136,29 @@ export function AudiencesCanvas() {
           }}
         />
       )}
-
+      {deleting && (
+        <ConfirmDialog
+          title={`Delete “${deleting.name}”?`}
+          message={
+            deleting.postCount > 0
+              ? `It will be removed from ${pluralize(deleting.postCount, "post")}. The posts themselves stay.`
+              : "No posts use this audience."
+          }
+          confirmLabel="Delete"
+          danger
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            try {
+              await deleteAudience(deleting.id);
+              toast.success(`Deleted audience “${deleting.name}”.`);
+              audiences.reload();
+            } catch (error) {
+              toast.error((error as Error).message);
+              throw error;
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

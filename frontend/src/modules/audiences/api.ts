@@ -17,3 +17,8 @@ export function listAudiences(): Promise<Audience[]> {
 export function updateAudience(id: string, input: AudienceInput): Promise<Audience> {
   return apiJson("PUT", `/audiences/${id}`, input);
 }
+
+/** DELETE /api/v1/audiences/{id}; removes the label's post assignments. */
+export async function deleteAudience(id: string): Promise<void> {
+  await api("DELETE", `/audiences/${id}`);
+}
