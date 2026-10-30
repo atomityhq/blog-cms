@@ -16,6 +16,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 @RestController
 @RequestMapping("/api/v1/audiences")
@@ -41,4 +42,9 @@ public class AudienceController {
         return ApiResponse.ok(audienceService.update(id, request));
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        audienceService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

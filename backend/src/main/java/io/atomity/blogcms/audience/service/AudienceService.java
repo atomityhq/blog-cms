@@ -44,6 +44,13 @@ public class AudienceService {
         return AudienceResponse.of(audience, audienceRepository.countPosts(id));
     }
 
+    /** post_audiences rows go with it (ON DELETE CASCADE); the posts stay. */
+    @Transactional
+    public void delete(UUID id) {
+        Audience audience = audienceRepository.findById(id).orElseThrow(() -> ApiException.notFound("Audience"));
+        audienceRepository.delete(audience);
+    }
+
     private String resolveSlug(AudienceRequest request, UUID selfId) {
         String slug = request.slug() == null || request.slug().isBlank() ? Slugs.slugify(request.name()) : request.slug();
         if (slug.isEmpty()) {
