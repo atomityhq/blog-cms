@@ -8,6 +8,9 @@ import io.atomity.blogcms.media.entity.Media;
 import io.atomity.blogcms.media.service.MediaService;
 import io.atomity.blogcms.shared.ApiException;
 import io.atomity.blogcms.shared.Slugs;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +25,9 @@ public class AuthorService {
     private final AuthorRepository authorRepository;
     private final MediaService mediaService;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     public AuthorService(AuthorRepository authorRepository, MediaService mediaService) {
         this.authorRepository = authorRepository;
         this.mediaService = mediaService;
@@ -30,10 +36,10 @@ public class AuthorService {
     @Transactional(readOnly = true)
     public List<AuthorResponse> list() {
         Map<UUID, Long> counts = authorRepository.countPostsPerAuthor().stream()
-                .collect(Collectors.toMap(AuthorRepository.PostCount::getAuthorId, AuthorRepository.PostCount::getPostCount));
+            .collect(Collectors.toMap(AuthorRepository.PostCount::getAuthorId, AuthorRepository.PostCount::getPostCount));
         return authorRepository.findAllByOrderByNameAsc().stream()
-                .map(author -> AuthorResponse.of(author, counts.getOrDefault(author.getId(), 0L)))
-                .toList();
+            .map(author -> AuthorResponse.of(author, counts.getOrDefault(author.getId(), 0L)))
+            .toList();
     }
 
     @Transactional
@@ -53,7 +59,11 @@ public class AuthorService {
     /** The author is taken off every post that credits them; the posts themselves stay. */
     @Transactional
     public void delete(UUID id) {
-        Author author = get(id);
+        Author author = authorRepository.findById(id)
+            .orElseThrow(() -> ApiException.notFound("Author"));
+
+        entityManager.lock(author, LockModeType.PESSIMISTIC_WRITE);
+
         List<UUID> postIds = authorRepository.findPostIds(id);
         if (!postIds.isEmpty()) {
             authorRepository.removeFromAllPosts(id);
