@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/audiences")
@@ -24,6 +26,11 @@ public class AudienceController {
     @PostMapping
     public ResponseEntity<ApiResponse<AudienceResponse>> create(@Valid @RequestBody AudienceRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(audienceService.create(request)));
+    }
+
+    @GetMapping
+    public ApiResponse<List<AudienceResponse>> list() {
+        return ApiResponse.ok(audienceService.list());
     }
 
 }

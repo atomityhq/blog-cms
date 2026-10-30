@@ -10,6 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class AudienceService {
@@ -23,6 +26,15 @@ public class AudienceService {
     public AudienceResponse create(AudienceRequest request) {
         Audience audience = audienceRepository.save(Audience.create(request.name(), resolveSlug(request, null)));
         return AudienceResponse.of(audience, 0);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AudienceResponse> list() {
+        Map<UUID, Long> counts = audienceRepository.countPostsPerAudience().stream()
+                .collect(Collectors.toMap(AudienceRepository.PostCount::getAudienceId, AudienceRepository.PostCount::getPostCount));
+        return audienceRepository.findAllByOrderByNameAsc().stream()
+                .map(audience -> AudienceResponse.of(audience, counts.getOrDefault(audience.getId(), 0L)))
+                .toList();
     }
 
     private String resolveSlug(AudienceRequest request, UUID selfId) {
