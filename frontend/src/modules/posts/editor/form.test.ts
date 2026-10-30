@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentDoc } from "@/types/content";
-import { EMPTY_FORM, formAfterSave, snapshotOf, type EditorForm } from "./form";
+import { EMPTY_FORM, formAfterSave, snapshotOf, validateForm, type EditorForm } from "./form";
 
 function paragraph(text: string): ContentDoc {
   return { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] };
@@ -56,5 +56,16 @@ describe("snapshotOf", () => {
 
   it("still sees a change outside the body", () => {
     expect(snapshotOf({ ...sent, tagIds: ["t1"] })).not.toBe(snapshotOf(sent));
+  });
+});
+
+describe("ideal for audience field", () => {
+  it("tracks audience changes as unsaved form changes", () => {
+    expect(snapshotOf({ ...sent, idealFor: "CIO, Head of IT" })).not.toBe(snapshotOf(sent));
+  });
+
+  it("validates the audience field length", () => {
+    const form = { ...EMPTY_FORM, idealFor: "x".repeat(301) };
+    expect(validateForm(form).idealFor).toBe("Keep this field under 300 characters.");
   });
 });

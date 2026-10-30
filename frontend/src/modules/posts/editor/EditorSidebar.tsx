@@ -156,6 +156,22 @@ function UrlPanel({
           className="input"
         />
       </Field>
+      <Field
+        label="Ideal for"
+        htmlFor="ideal-for"
+        error={errors.idealFor}
+        count={{ current: form.idealFor.length, max: POST_LIMITS.idealFor }}
+        hint="Comma-separated roles or audiences, e.g. CIO, Head of IT."
+      >
+        <input
+          id="ideal-for"
+          className="input"
+          value={form.idealFor}
+          onChange={(e) => onChange({ idealFor: e.target.value })}
+          placeholder="CIO, Head of IT"
+          aria-invalid={Boolean(errors.idealFor)}
+        />
+      </Field>
     </Panel>
   );
 }

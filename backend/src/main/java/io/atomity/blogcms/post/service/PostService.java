@@ -212,7 +212,7 @@ public class PostService {
                 : markdownSourceRepository.findById(request.markdownSourceId())
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
 
-        return new PostEdit(title, resolveSlug(request.slug(), title, selfId), clean(request.excerpt()),
+        return new PostEdit(title, resolveSlug(request.slug(), title, selfId), clean(request.excerpt()), clean(request.idealFor()),
                 request.content(), content.text(), content.wordCount(), content.readingTimeMinutes(),
                 cover, clean(request.coverImageAlt()), markdownSource, clean(request.seoTitle()), clean(request.metaDescription()),
                 clean(request.focusKeyword()), clean(request.canonicalUrl()), Boolean.TRUE.equals(request.featured()),

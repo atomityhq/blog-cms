@@ -99,6 +99,23 @@ class BlogApiTest extends IntegrationTest {
     }
 
     @Test
+    void idealForIsExposedInPublicBlogListAndDetail() throws Exception {
+        Map<String, Object> body = postBody("Audience guide", doc("Useful guidance."));
+        body.put("idealFor", "CIO, CISO");
+        JsonNode created = data(call(post("/api/v1/posts"), body).andExpect(status().isCreated()));
+        String id = created.path("id").asText();
+        publish(id);
+
+        mockMvc.perform(get("/api/v1/blogs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].idealFor").value("CIO, CISO"));
+
+        mockMvc.perform(get("/api/v1/blogs/slug/audience-guide"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.idealFor").value("CIO, CISO"));
+    }
+
+    @Test
     void listRejectsPageWhenOffsetExceedsIntegerMaxValue() throws Exception {
         call(get("/api/v1/blogs?page=2147483647"))
             .andExpect(status().isBadRequest())
