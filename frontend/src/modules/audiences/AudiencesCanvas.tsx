@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, UsersRound as AudienceIcon } from "lucide-react";
+import { EllipsisVertical, Pencil, Plus, UsersRound as AudienceIcon } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
+import { Menu } from "@/components/ui/Menu";
 import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -15,7 +16,7 @@ import { useAsync } from "@/hooks/useAsync";
 import { formatDate } from "@/lib/format";
 import { slugify } from "@/lib/slug";
 import type { Audience } from "@/types/audience";
-import { createAudience, listAudiences } from "./api";
+import { createAudience, listAudiences, updateAudience } from "./api";
 
 export function AudiencesCanvas() {
   const toast = useToast();
@@ -48,7 +49,31 @@ export function AudiencesCanvas() {
       render: (audience) => <span className="font-mono text-[11.5px] tabular-nums">{audience.postCount}</span>,
     },
     { key: "created", header: "Added", width: "120px", render: (audience) => <span className="text-secondary">{formatDate(audience.createdAt)}</span> },
-
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      width: "48px",
+      align: "right",
+      render: (audience) => (
+        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="inline-flex">
+          <Menu
+            items={[
+              { label: "Rename", icon: Pencil, onSelect: () => setEditing(audience) },
+            ]}
+            trigger={(props) => (
+              <button
+                type="button"
+                {...props}
+                aria-label={`Actions for ${audience.name}`}
+                className="cursor-pointer rounded-sm p-1 text-muted hover:bg-hover hover:text-ink"
+              >
+                <EllipsisVertical size={15} />
+              </button>
+            )}
+          />
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -89,6 +114,7 @@ export function AudiencesCanvas() {
                 columns={columns}
                 rows={rows}
                 rowKey={(t) => t.id}
+                onRowClick={setEditing}
                 loading={audiences.loading}
                 skeletonRows={5}
               />
@@ -129,7 +155,7 @@ function AudienceDialog({ audience, onClose, onSaved }: { audience: Audience | n
     setError(undefined);
     const input = { name, slug: slug || slugify(name) };
     try {
-      const saved = await createAudience(input);
+      const saved = audience ? await updateAudience(audience.id, input) : await createAudience(input);
       onSaved(saved, !audience);
       onClose();
     } catch (err) {

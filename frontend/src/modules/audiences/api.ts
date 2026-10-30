@@ -12,3 +12,8 @@ export function createAudience(input: AudienceInput): Promise<Audience> {
 export function listAudiences(): Promise<Audience[]> {
   return api("GET", "/audiences");
 }
+
+/** PUT /api/v1/audiences/{id} */
+export function updateAudience(id: string, input: AudienceInput): Promise<Audience> {
+  return apiJson("PUT", `/audiences/${id}`, input);
+}
