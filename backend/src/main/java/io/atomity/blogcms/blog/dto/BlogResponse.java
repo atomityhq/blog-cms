@@ -21,6 +21,7 @@ public record BlogResponse(
         String title,
         String slug,
         String excerpt,
+        String idealFor,
         boolean featured,
         List<AuthorRef> authors,
         List<TagRef> tags,
@@ -36,7 +37,7 @@ public record BlogResponse(
         String canonicalUrl) {
 
     public static BlogResponse of(Post post) {
-        return new BlogResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(),
+        return new BlogResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getIdealFor(),
                 post.isFeatured(), PostSummaryResponse.authorRefs(post), PostSummaryResponse.tagRefs(post),
                 MediaRef.of(post.getCoverImage()), post.getWordCount(), post.getReadingTimeMinutes(),
                 post.getPublishedAt(), post.getUpdatedAt(), post.getContent(), post.getCoverImageAlt(),

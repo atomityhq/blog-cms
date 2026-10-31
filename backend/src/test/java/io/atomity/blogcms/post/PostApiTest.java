@@ -81,6 +81,34 @@ class PostApiTest extends IntegrationTest {
     }
 
     @Test
+    void idealForIsPersistedReturnedAndValidated() throws Exception {
+        Map<String, Object> body = postBody("Audience post", doc("Useful content"));
+        body.put("idealFor", "CIO, Head of IT");
+        JsonNode created = data(call(post("/api/v1/posts"), body).andExpect(status().isCreated()));
+        String id = created.path("id").asText();
+
+        assertThat(created.path("idealFor").asText()).isEqualTo("CIO, Head of IT");
+        call(get("/api/v1/posts/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.idealFor").value("CIO, Head of IT"));
+        call(get("/api/v1/posts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].idealFor").value("CIO, Head of IT"));
+
+        body.put("idealFor", "CISO");
+        body.put("version", created.path("version").asLong());
+        JsonNode updated = data(call(put("/api/v1/posts/" + id), body).andExpect(status().isOk()));
+        assertThat(updated.path("idealFor").asText()).isEqualTo("CISO");
+
+        body.put("title", "Invalid audience");
+        body.put("idealFor", "x".repeat(301));
+        body.remove("version");
+        call(post("/api/v1/posts"), body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     void untitledDraftGetsAPlaceholderSlug() throws Exception {
         JsonNode created = createPost("");
         assertThat(created.path("slug").asText()).startsWith("draft-");

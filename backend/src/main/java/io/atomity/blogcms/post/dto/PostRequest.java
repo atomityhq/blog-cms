@@ -28,6 +28,10 @@ public record PostRequest(
         @Pattern(regexp = NulCharacters.NONE, message = NulCharacters.MESSAGE)
         String excerpt,
 
+        @Size(max = 300, message = "must be at most 300 characters")
+        @Pattern(regexp = NulCharacters.NONE, message = NulCharacters.MESSAGE)
+        String idealFor,
+
         @NotNull(message = "is required")
         JsonNode content,
 

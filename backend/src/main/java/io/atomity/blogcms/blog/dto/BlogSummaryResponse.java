@@ -20,6 +20,7 @@ public record BlogSummaryResponse(
         String title,
         String slug,
         String excerpt,
+        String idealFor,
         boolean featured,
         List<AuthorRef> authors,
         List<TagRef> tags,
@@ -30,7 +31,7 @@ public record BlogSummaryResponse(
         Instant updatedAt) {
 
     public static BlogSummaryResponse of(Post post) {
-        return new BlogSummaryResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(),
+        return new BlogSummaryResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getIdealFor(),
                 post.isFeatured(), PostSummaryResponse.authorRefs(post), PostSummaryResponse.tagRefs(post),
                 MediaRef.of(post.getCoverImage()), post.getWordCount(), post.getReadingTimeMinutes(),
                 post.getPublishedAt(), post.getUpdatedAt());

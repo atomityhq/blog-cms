@@ -17,6 +17,7 @@ public record PostEdit(
         String title,
         String slug,
         String excerpt,
+        String idealFor,
         JsonNode content,
         String contentText,
         int wordCount,

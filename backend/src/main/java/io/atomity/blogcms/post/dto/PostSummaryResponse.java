@@ -17,6 +17,7 @@ public record PostSummaryResponse(
         String title,
         String slug,
         String excerpt,
+        String idealFor,
         PostStatus status,
         boolean featured,
         List<AuthorRef> authors,
@@ -29,7 +30,7 @@ public record PostSummaryResponse(
         Instant updatedAt) {
 
     public static PostSummaryResponse of(Post post) {
-        return new PostSummaryResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getStatus(),
+        return new PostSummaryResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getIdealFor(), post.getStatus(),
                 post.isFeatured(), authorRefs(post), tagRefs(post), MediaRef.of(post.getCoverImage()), post.getWordCount(),
                 post.getReadingTimeMinutes(), post.getPublishedAt(), post.getCreatedAt(), post.getUpdatedAt());
     }

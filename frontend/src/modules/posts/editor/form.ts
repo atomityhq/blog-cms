@@ -10,6 +10,7 @@ export interface EditorForm {
   title: string;
   slug: string;
   excerpt: string;
+  idealFor: string;
   content: ContentDoc;
   cover: MediaRef | null;
   coverImageAlt: string;
@@ -29,6 +30,7 @@ export const EMPTY_FORM: EditorForm = {
   title: "",
   slug: "",
   excerpt: "",
+  idealFor: "",
   content: EMPTY_DOC,
   cover: null,
   coverImageAlt: "",
@@ -47,6 +49,7 @@ export function formFromPost(post: Post): EditorForm {
     title: post.title,
     slug: post.slug,
     excerpt: post.excerpt,
+    idealFor: post.idealFor,
     content: post.content,
     cover: post.coverImage,
     coverImageAlt: post.coverImageAlt,
@@ -93,6 +96,7 @@ export function inputFromForm(form: EditorForm): PostInput {
     title: form.title,
     slug: form.slug || fallbackSlug(form.title),
     excerpt: form.excerpt,
+    idealFor: form.idealFor,
     content: form.content,
     coverImageId: form.cover?.id ?? null,
     coverImageAlt: form.coverImageAlt,
@@ -121,6 +125,7 @@ export function validateForm(form: EditorForm): FormErrors {
   if (form.title.length > POST_LIMITS.title) errors.title = `Keep the title under ${POST_LIMITS.title} characters.`;
   if (form.slug && !SLUG_PATTERN.test(form.slug)) errors.slug = "Use lowercase letters, numbers and single hyphens only.";
   if (form.excerpt.length > POST_LIMITS.excerpt) errors.excerpt = `Keep the excerpt under ${POST_LIMITS.excerpt} characters.`;
+  if (form.idealFor.length > POST_LIMITS.idealFor) errors.idealFor = `Keep this field under ${POST_LIMITS.idealFor} characters.`;
   if (form.seoTitle.length > POST_LIMITS.seoTitle) errors.seoTitle = `Search engines cut titles after ~${POST_LIMITS.seoTitle} characters.`;
   if (form.metaDescription.length > POST_LIMITS.metaDescription)
     errors.metaDescription = `Search engines cut descriptions after ~${POST_LIMITS.metaDescription} characters.`;

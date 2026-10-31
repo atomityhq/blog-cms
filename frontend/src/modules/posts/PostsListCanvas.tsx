@@ -136,6 +136,14 @@ export function PostsListCanvas() {
               {post.featured && <Star size={12} className="shrink-0 fill-[var(--atomity-orange)] text-[var(--atomity-orange)]" aria-label="Featured" />}
             </div>
             <div className="truncate font-mono text-[11px] text-muted">/{post.slug}</div>
+            {post.idealFor.trim() && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <span className="text-[10px] text-muted">Ideal for:</span>
+                {post.idealFor.split(",").map((role) => role.trim()).filter(Boolean).slice(0, 3).map((role) => (
+                  <StatusChip key={role} tone="neutral" className="!normal-case !tracking-normal">{role}</StatusChip>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ),
