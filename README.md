@@ -139,7 +139,8 @@ Copy the example environment file:
 
     cp .env.example .env
 
-Before starting the stack, edit `.env` and configure `NEXTCLOUD_URL`, `NEXTCLOUD_USERNAME`, and `NEXTCLOUD_PASSWORD` with valid Nextcloud credentials. Use a dedicated Nextcloud app password where supported. Set `NEXTCLOUD_REMOTE_DIRECTORY` to the remote upload directory if you want something other than `/BlogCMS`. The values in `.env.example` are placeholders and will not connect to a real instance.
+By default in Docker Compose, `SPRING_PROFILES_ACTIVE=local-storage` is used, storing media in `./backend/uploads` without requiring Nextcloud. If you prefer to use Nextcloud, configure `NEXTCLOUD_URL`, `NEXTCLOUD_USERNAME`, and `NEXTCLOUD_PASSWORD` in `.env` and set `SPRING_PROFILES_ACTIVE` to default.
+
 
 Start the stack:
 
@@ -179,6 +180,8 @@ make install && make frontend             # Next.js on :3000 (also enables the g
 
 | Variable                     | App      | Description                                  |
 |------------------------------|----------|----------------------------------------------|
+| `SPRING_PROFILES_ACTIVE`      | backend  | Active Spring profiles (e.g. `local-storage` to store media on local disk) |
+| `BLOGCMS_MEDIA_LOCAL_DIRECTORY` | backend | Directory path for local disk media storage (default `/app/uploads`) |
 | `SPRING_DATASOURCE_URL`      | backend  | JDBC URL, e.g. `jdbc:postgresql://host:5432/blog_cms` |
 | `SPRING_DATASOURCE_USERNAME` | backend  | Database user                                |
 | `SPRING_DATASOURCE_PASSWORD` | backend  | Database password                            |
