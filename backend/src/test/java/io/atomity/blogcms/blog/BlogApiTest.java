@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.atomity.blogcms.IntegrationTest;
 import io.atomity.blogcms.media.TestImages;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,6 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -482,5 +485,45 @@ class BlogApiTest extends IntegrationTest {
         mockMvc.perform(get("/api/v1/blogs").header(HttpHeaders.AUTHORIZATION, "Bearer not-a-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errors[0].errorCode").value("UNAUTHORIZED"));
+    }
+
+    // ── HEAD requests ──────────────────────────────────────────────────────
+
+    @Test
+    void headOnPublicBlogEndpointsWorksWithoutAToken() throws Exception {
+        String id = createPost("Head post", "Visible body.").path("id").asText();
+        publish(id);
+
+        // No token on purpose: HEAD must behave like GET on public paths.
+        mockMvc.perform(head("/api/v1/blogs")).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/blogs/" + id)).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/blogs/slug/head-post")).andExpect(status().isOk());
+    }
+
+    @Test
+    void headHidesEverythingThatIsNotPublished() throws Exception {
+        String draft = createPost("Draft head post", "Draft body.").path("id").asText();
+
+        mockMvc.perform(head("/api/v1/blogs/" + draft)).andExpect(status().isNotFound());
+        mockMvc.perform(head("/api/v1/blogs/" + UUID.randomUUID())).andExpect(status().isNotFound());
+        mockMvc.perform(head("/api/v1/blogs/slug/draft-head-post")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void headDoesNotOpenAnythingThatIsProtected() throws Exception {
+        String id = createPost("Guarded head post", "Body.").path("id").asText();
+
+        mockMvc.perform(head("/api/v1/posts")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1posts/" + id)).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/media")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void headOnMediaFileWorksWithoutAToken() throws Exception {
+        String id = uploadImage("head.png").path("id").asText();
+
+        mockMvc.perform(head("/api/v1/media/" + id + "/file")).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/media/" + UUID.randomUUID() + "/file")).andExpect(status().isNotFound());
+
     }
 }
