@@ -4,9 +4,9 @@ import type { MarkdownSourceRef } from "./markdown";
 import type { MediaRef } from "./media";
 import type { TagRef } from "./tag";
 
-export type PostStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type PostStatus = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
-export const POST_STATUSES: PostStatus[] = ["DRAFT", "PUBLISHED", "ARCHIVED"];
+export const POST_STATUSES: PostStatus[] = ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"];
 
 /** One row in the posts list — everything except the body. */
 export interface PostSummary {
@@ -22,6 +22,7 @@ export interface PostSummary {
   wordCount: number;
   readingTimeMinutes: number;
   publishedAt: string | null;
+  scheduledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

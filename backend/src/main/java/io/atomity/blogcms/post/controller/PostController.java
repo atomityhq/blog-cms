@@ -1,5 +1,5 @@
 package io.atomity.blogcms.post.controller;
-
+import io.atomity.blogcms.post.dto.SchedulePostRequest;
 import io.atomity.blogcms.post.dto.PostListQuery;
 import io.atomity.blogcms.post.dto.PostRequest;
 import io.atomity.blogcms.post.dto.PostResponse;
@@ -70,6 +70,19 @@ public class PostController {
     public ApiResponse<PostResponse> unpublish(@PathVariable UUID id) {
         return ApiResponse.ok(postService.unpublish(id));
     }
+
+@PostMapping("/{id}/schedule")
+public ApiResponse<PostResponse> schedule(
+        @PathVariable UUID id,
+        @Valid @RequestBody SchedulePostRequest request) {
+    return ApiResponse.ok(postService.schedule(id, request.scheduledAt()));
+}
+
+@PostMapping("/{id}/cancel-schedule")
+public ApiResponse<PostResponse> cancelSchedule(@PathVariable UUID id) {
+    return ApiResponse.ok(postService.cancelSchedule(id));
+}
+
 
     @PostMapping("/{id}/archive")
     public ApiResponse<PostResponse> archive(@PathVariable UUID id) {
