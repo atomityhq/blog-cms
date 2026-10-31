@@ -161,6 +161,17 @@ export function PostsListCanvas() {
         ),
     },
     {
+      key: "audiences",
+      header: "Audience",
+      width: "200px",
+      render: (post) => (
+        <div className="flex flex-col gap-1 text-[11.5px] text-secondary">
+          <span><span className="font-semibold">Primary:</span> {post.primaryAudiences.map((a) => a.name).join(", ") || "None"}</span>
+          <span><span className="font-semibold">Secondary:</span> {post.secondaryAudiences.map((a) => a.name).join(", ") || "None"}</span>
+        </div>
+      ),
+    },
+    {
       key: "updatedAt",
       header: "Updated",
       width: "116px",

@@ -1,12 +1,42 @@
 import { describe, expect, it } from "vitest";
 import type { ContentDoc } from "@/types/content";
-import { EMPTY_FORM, formAfterSave, snapshotOf, type EditorForm } from "./form";
+import type { Post } from "@/types/post";
+import { EMPTY_FORM, formAfterSave, formFromPost, inputFromForm, snapshotOf, validateForm, type EditorForm } from "./form";
 
 function paragraph(text: string): ContentDoc {
   return { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] };
 }
 
 const sent: EditorForm = { ...EMPTY_FORM, title: "Hello", slug: "hello", content: paragraph("First draft") };
+
+describe("audience editing", () => {
+  it("loads both groups and sends their IDs back on save", () => {
+    const post: Post = {
+      ...inputFromForm(sent), id: "post-1", status: "DRAFT", version: 1,
+      authors: [], tags: [], coverImage: null, markdownSource: null,
+      wordCount: 2, readingTimeMinutes: 1, publishedAt: null, createdAt: "", updatedAt: "",
+      primaryAudiences: [{ id: "leaders", name: "Technology leaders", slug: "technology-leaders" }],
+      secondaryAudiences: [{ id: "teams", name: "Engineering teams", slug: "engineering-teams" }],
+    };
+    const loaded = formFromPost(post);
+    expect(inputFromForm(loaded)).toMatchObject({ primaryAudienceIds: ["leaders"], secondaryAudienceIds: ["teams"] });
+    expect(inputFromForm({ ...loaded, primaryAudienceIds: [], secondaryAudienceIds: [] })).toMatchObject({
+      primaryAudienceIds: [], secondaryAudienceIds: [],
+    });
+  });
+
+  it("tracks an audience-only edit as unsaved and keeps it during a save", () => {
+    const current = { ...sent, primaryAudienceIds: ["leaders"] };
+    expect(snapshotOf(current)).not.toBe(snapshotOf(sent));
+    expect(formAfterSave(current, sent, "hello").primaryAudienceIds).toEqual(["leaders"]);
+  });
+
+  it("rejects overlapping groups and more than 30 selections", () => {
+    expect(validateForm({ ...sent, primaryAudienceIds: ["teams"], secondaryAudienceIds: ["teams"] }).secondaryAudienceIds).toBeDefined();
+    expect(validateForm({ ...sent, primaryAudienceIds: Array.from({ length: 31 }, (_, i) => String(i)) }).primaryAudienceIds).toBeDefined();
+    expect(validateForm({ ...sent, primaryAudienceIds: ["leaders"], secondaryAudienceIds: ["teams"] })).toEqual({});
+  });
+});
 
 describe("formAfterSave", () => {
   it("matches what was saved when nothing changed during the save", () => {
