@@ -78,3 +78,12 @@ export const POST_LIMITS = {
   metaDescription: 160,
   focusKeyword: 100,
 } as const;
+
+export type StatusTab = PostStatus | "ALL";
+
+export const validSortKeys: readonly PostSortKey[] = [
+  "title",
+  "updatedAt",
+  "wordCount",
+];
+export const validStatuses: PostStatus[] = ["DRAFT", "PUBLISHED", "ARCHIVED"];
