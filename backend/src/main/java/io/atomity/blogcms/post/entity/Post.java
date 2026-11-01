@@ -1,5 +1,4 @@
 package io.atomity.blogcms.post.entity;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import io.atomity.blogcms.author.entity.Author;
 import io.atomity.blogcms.markdown.entity.MarkdownSource;
@@ -116,6 +115,8 @@ public class Post {
             inverseJoinColumns = @JoinColumn(name = "author_id"))
     @OrderColumn(name = "position")
     private List<Author> authors = new ArrayList<>();
+    @Column(name = "scheduled_at")
+    private Instant scheduledAt;
 
     @ManyToMany
     @JoinTable(name = "post_tags",
@@ -170,23 +171,51 @@ public class Post {
      * unpublish/republish, so re-publishing doesn't move a post to the top of feeds.
      */
     public void publish() {
-        status = PostStatus.PUBLISHED;
-        if (publishedAt == null) {
-            publishedAt = Timestamps.now();
-        }
-        touch();
+    status = PostStatus.PUBLISHED;
+    scheduledAt = null;
+
+    if (publishedAt == null) {
+        publishedAt = Timestamps.now();
     }
+
+    touch();
+}
+
+    public void schedule(Instant scheduledAt) {
+    if (scheduledAt == null) {
+        throw new IllegalArgumentException("Scheduled time must not be null");
+    }
+
+    if (!scheduledAt.isAfter(Timestamps.now())) {
+        throw new IllegalArgumentException("Scheduled time must be in the future");
+    }
+
+    this.scheduledAt = scheduledAt;
+    this.status = PostStatus.SCHEDULED;
+    touch();
+}
 
     /** Back to draft — from published, or restoring an archived post. */
     public void unpublish() {
-        status = PostStatus.DRAFT;
-        touch();
+    status = PostStatus.DRAFT;
+    scheduledAt = null;
+    touch();
+}
+    public void cancelSchedule() {
+    if (status != PostStatus.SCHEDULED) {
+        throw new IllegalStateException("Post is not scheduled");
     }
 
+    scheduledAt = null;
+    status = PostStatus.DRAFT;
+    touch();
+}
+
     public void archive() {
-        status = PostStatus.ARCHIVED;
-        touch();
-    }
+    status = PostStatus.ARCHIVED;
+    scheduledAt = null;
+    touch();
+}
 
     /** True when there's nothing to read yet: no words and no images. */
     public boolean hasNoContent() {
@@ -242,4 +271,5 @@ public class Post {
     public long getVersion() { return version; }
     public List<Author> getAuthors() { return authors; }
     public Set<Tag> getTags() { return tags; }
+    public Instant getScheduledAt() { return scheduledAt; }
 }

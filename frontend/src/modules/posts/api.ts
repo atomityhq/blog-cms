@@ -55,6 +55,16 @@ export function unpublishPost(id: string): Promise<Post> {
   return api("POST", `/posts/${id}/unpublish`);
 }
 
+/** POST /api/v1/posts/{id}/schedule — schedule publication at a future time. */
+export function schedulePost(id: string, scheduledAt: string): Promise<Post> {
+  return apiJson("POST", `/posts/${id}/schedule`, { scheduledAt });
+}
+
+/** POST /api/v1/posts/{id}/cancel-schedule — return a scheduled post to draft. */
+export function cancelScheduledPost(id: string): Promise<Post> {
+  return api("POST", `/posts/${id}/cancel-schedule`);
+}
+
 /** POST /api/v1/posts/{id}/archive */
 export function archivePost(id: string): Promise<Post> {
   return api("POST", `/posts/${id}/archive`);

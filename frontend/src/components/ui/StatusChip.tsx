@@ -1,10 +1,17 @@
 import { cn } from "@/lib/utils";
 import type { PostStatus } from "@/types/post";
 
-export type ChipTone = "published" | "draft" | "archived" | "danger" | "neutral";
+export type ChipTone =
+  | "published"
+  | "scheduled"
+  | "draft"
+  | "archived"
+  | "danger"
+  | "neutral";
 
 const TONE_CLASSES: Record<ChipTone, string> = {
   published: "bg-[var(--chip-published-bg)] text-ink",
+  scheduled: "bg-hover text-ink",
   draft: "bg-[var(--chip-draft-bg)] text-ink",
   archived: "bg-[var(--chip-archived-bg)] text-muted",
   danger: "bg-[var(--chip-danger-bg)] text-ink",
@@ -18,7 +25,11 @@ export interface StatusChipProps {
 }
 
 /** Pill status marker — mono uppercase, as in atomity-product. */
-export function StatusChip({ tone = "neutral", children, className }: StatusChipProps) {
+export function StatusChip({
+  tone = "neutral",
+  children,
+  className,
+}: StatusChipProps) {
   return (
     <span
       className={cn(
@@ -34,10 +45,15 @@ export function StatusChip({ tone = "neutral", children, className }: StatusChip
 
 const STATUS_TONE: Record<PostStatus, ChipTone> = {
   PUBLISHED: "published",
+  SCHEDULED: "scheduled",
   DRAFT: "draft",
   ARCHIVED: "archived",
 };
 
 export function PostStatusChip({ status }: { status: PostStatus }) {
-  return <StatusChip tone={STATUS_TONE[status]}>{status.toLowerCase()}</StatusChip>;
+  return (
+    <StatusChip tone={STATUS_TONE[status]}>
+      {status.toLowerCase()}
+    </StatusChip>
+  );
 }
