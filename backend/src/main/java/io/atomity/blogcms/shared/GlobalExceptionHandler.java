@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -37,22 +38,30 @@ public class GlobalExceptionHandler {
 
     /** Unique slug constraints and the resource each one belongs to. */
     private static final Map<String, String> SLUG_CONSTRAINTS = Map.of(
-            "uq_posts_slug", "post",
-            "uq_tags_slug", "tag",
-            "uq_authors_slug", "author");
+        "uq_posts_slug", "post",
+        "uq_tags_slug", "tag",
+        "uq_authors_slug", "author");
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Object>> handleApi(ApiException ex) {
         return ResponseEntity.status(ex.getStatus())
-                .body(ApiResponse.error(apiError(ex.getErrorCode(), ex.getMessage())));
+            .body(ApiResponse.error(apiError(ex.getErrorCode(), ex.getMessage())));
     }
 
     /** Two saves raced past the version check; the loser gets the same answer as a stale save. */
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<ApiResponse<Object>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error(apiError("VERSION_CONFLICT",
-                        "This item was changed somewhere else. Reload to get the latest version.")));
+            .body(ApiResponse.error(apiError("VERSION_CONFLICT",
+                "This item was changed somewhere else. Reload to get the latest version.")));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Object>> handlePessimisticLock(PessimisticLockingFailureException ex) {
+        log.warn("Pessimistic lock failure: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(ApiResponse.error(apiError("CONFLICT",
+                "The item is being modified by someone else. Please retry.")));
     }
 
     /**
@@ -71,13 +80,13 @@ public class GlobalExceptionHandler {
             case UNIQUE_VIOLATION -> {
                 String resource = constraint == null ? null : SLUG_CONSTRAINTS.get(constraint);
                 yield resource != null
-                        ? mappedDataError(HttpStatus.CONFLICT, "SLUG_TAKEN",
-                                "Another " + resource + " already uses this slug", sqlState, constraint)
-                        : conflictingWrite(sqlState, constraint);
+                    ? mappedDataError(HttpStatus.CONFLICT, "SLUG_TAKEN",
+                    "Another " + resource + " already uses this slug", sqlState, constraint)
+                    : conflictingWrite(sqlState, constraint);
             }
             case FOREIGN_KEY_VIOLATION -> conflictingWrite(sqlState, constraint);
             case STRING_TOO_LONG -> mappedDataError(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
-                    "A value is longer than allowed", sqlState, constraint);
+                "A value is longer than allowed", sqlState, constraint);
             default -> handleUnexpected(ex);
         };
     }
@@ -85,62 +94,62 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("BAD_REQUEST", "Invalid value for '" + ex.getName() + "'")));
+            .body(ApiResponse.error(apiError("BAD_REQUEST", "Invalid value for '" + ex.getName() + "'")));
     }
 
     @ExceptionHandler({MissingServletRequestParameterException.class, MissingServletRequestPartException.class})
     public ResponseEntity<ApiResponse<Object>> handleMissingParameter(Exception ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("BAD_REQUEST", ex.getMessage())));
+            .body(ApiResponse.error(apiError("BAD_REQUEST", ex.getMessage())));
     }
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ApiResponse<Object>> handleBadMultipart(MultipartException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("MALFORMED_REQUEST", "The upload could not be read")));
+            .body(ApiResponse.error(apiError("MALFORMED_REQUEST", "The upload could not be read")));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Object>> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(ApiResponse.error(apiError("FILE_TOO_LARGE", "The file is larger than the upload limit")));
+            .body(ApiResponse.error(apiError("FILE_TOO_LARGE", "The file is larger than the upload limit")));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Object>> handleValidation(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getField() + " " + error.getDefaultMessage())
-                .collect(Collectors.joining("; "));
+            .map(error -> error.getField() + " " + error.getDefaultMessage())
+            .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("VALIDATION_ERROR", detail)));
+            .body(ApiResponse.error(apiError("VALIDATION_ERROR", detail)));
     }
 
     /** Query parameters bound to an object (e.g. ?status=BOGUS on the posts list). */
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ApiResponse<Object>> handleBind(BindException ex) {
         String detail = ex.getFieldErrors().stream()
-                .map(error -> "Invalid value for '" + error.getField() + "'")
-                .collect(Collectors.joining("; "));
+            .map(error -> "Invalid value for '" + error.getField() + "'")
+            .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("BAD_REQUEST", detail)));
+            .body(ApiResponse.error(apiError("BAD_REQUEST", detail)));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Object>> handleUnreadable(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("MALFORMED_REQUEST", "Request body is missing or not valid JSON")));
+            .body(ApiResponse.error(apiError("MALFORMED_REQUEST", "Request body is missing or not valid JSON")));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error(apiError("BAD_REQUEST", ex.getMessage())));
+            .body(ApiResponse.error(apiError("BAD_REQUEST", ex.getMessage())));
     }
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalState(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error(apiError("CONFLICT", ex.getMessage())));
+            .body(ApiResponse.error(apiError("CONFLICT", ex.getMessage())));
     }
 
     /**
@@ -150,32 +159,32 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Object>> handleNotFound(NoResourceFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(apiError("NOT_FOUND", "No endpoint at /" + ex.getResourcePath())));
+            .body(ApiResponse.error(apiError("NOT_FOUND", "No endpoint at /" + ex.getResourcePath())));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiResponse<Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ApiResponse.error(apiError("METHOD_NOT_ALLOWED", ex.getMessage())));
+            .body(ApiResponse.error(apiError("METHOD_NOT_ALLOWED", ex.getMessage())));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleUnexpected(Exception ex) {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(apiError("INTERNAL_ERROR", "An unexpected error occurred")));
+            .body(ApiResponse.error(apiError("INTERNAL_ERROR", "An unexpected error occurred")));
     }
 
     private static ResponseEntity<ApiResponse<Object>> conflictingWrite(String sqlState, String constraint) {
         return mappedDataError(HttpStatus.CONFLICT, "CONFLICT",
-                "This change conflicts with one that was just saved. Reload and try again.", sqlState, constraint);
+            "This change conflicts with one that was just saved. Reload and try again.", sqlState, constraint);
     }
 
     /** Logs only the SQLState and constraint name: the driver's message can contain the rejected values. */
     private static ResponseEntity<ApiResponse<Object>> mappedDataError(HttpStatus status, String code, String message,
                                                                        String sqlState, String constraint) {
         log.warn("Database rejected the write (SQLState {}, constraint {}); answered {} {}",
-                sqlState, constraint, status.value(), code);
+            sqlState, constraint, status.value(), code);
         return ResponseEntity.status(status).body(ApiResponse.error(apiError(code, message)));
     }
 

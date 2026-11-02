@@ -1,8 +1,10 @@
 package io.atomity.blogcms.author.repository;
 
 import io.atomity.blogcms.author.entity.Author;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -21,6 +24,10 @@ public interface AuthorRepository extends JpaRepository<Author, UUID> {
     boolean existsBySlug(String slug);
 
     boolean existsBySlugAndIdNot(String slug, UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Author a WHERE a.id = :id")
+    Optional<Author> findByIdForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT author_id AS authorId, COUNT(*) AS postCount FROM post_authors GROUP BY author_id", nativeQuery = true)
     List<PostCount> countPostsPerAuthor();
@@ -51,7 +58,7 @@ public interface AuthorRepository extends JpaRepository<Author, UUID> {
 
     @Modifying
     @Query(value = "UPDATE post_authors SET position = -position - 1 WHERE post_id IN (:postIds) AND position < 0",
-            nativeQuery = true)
+        nativeQuery = true)
     void renumberPositionsStepTwo(@Param("postIds") Collection<UUID> postIds);
 
     interface PostCount {

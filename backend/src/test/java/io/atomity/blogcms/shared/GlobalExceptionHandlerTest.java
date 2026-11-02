@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -41,7 +42,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void foreignKeyViolationIsAConflict() {
         var cause = new ConstraintViolationException("could not execute statement",
-                new SQLException("violates foreign key constraint", "23503"), "posts_cover_image_id_fkey");
+            new SQLException("violates foreign key constraint", "23503"), "posts_cover_image_id_fkey");
 
         assertResponse(handler.handleDataIntegrity(wrap(cause)), HttpStatus.CONFLICT, "CONFLICT");
     }
@@ -49,7 +50,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void uniqueViolationOutsideTheSlugConstraintsIsAConflict() {
         var cause = new ConstraintViolationException("could not execute statement",
-                new SQLException("duplicate key value", "23505"), "uq_media_storage_key");
+            new SQLException("duplicate key value", "23505"), "uq_media_storage_key");
 
         assertResponse(handler.handleDataIntegrity(wrap(cause)), HttpStatus.CONFLICT, "CONFLICT");
     }
@@ -57,9 +58,16 @@ class GlobalExceptionHandlerTest {
     @Test
     void unmappedSqlStateStaysAnInternalError() {
         var cause = new ConstraintViolationException("could not execute statement",
-                new SQLException("violates check constraint", "23514"), "ck_posts_status");
+            new SQLException("violates check constraint", "23514"), "ck_posts_status");
 
         assertResponse(handler.handleDataIntegrity(wrap(cause)), HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR");
+    }
+
+    @Test
+    void pessimisticLockingFailureIsAConflict() {
+        PessimisticLockingFailureException ex = new PessimisticLockingFailureException("Deadlock detected");
+
+        assertResponse(handler.handlePessimisticLock(ex), HttpStatus.CONFLICT, "CONFLICT");
     }
 
     private static DataIntegrityViolationException wrap(Exception cause) {
