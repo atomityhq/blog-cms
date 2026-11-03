@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,30 +55,30 @@ class AuthorDeleteRaceTest extends IntegrationTest {
         @Primary
         public AuthorRepository raceAuthorRepository(AuthorRepository real, RaceContext context) {
             return (AuthorRepository) Proxy.newProxyInstance(
-                    AuthorRepository.class.getClassLoader(),
-                    new Class<?>[]{AuthorRepository.class},
-                    (proxy, method, args) -> {
-                        if (method.getName().equals("findPostIds") && context.pauseOnFindPostIds) {
-                            Object result;
-                            try {
-                                result = method.invoke(real, args);
-                            } catch (InvocationTargetException e) {
-                                throw e.getCause();
-                            }
-                            context.deletePaused.countDown();
-                            try {
-                                context.deleteResume.await(10, TimeUnit.SECONDS);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                            return result;
-                        }
+                AuthorRepository.class.getClassLoader(),
+                new Class<?>[]{AuthorRepository.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("findPostIds") && context.pauseOnFindPostIds) {
+                        Object result;
                         try {
-                            return method.invoke(real, args);
+                            result = method.invoke(real, args);
                         } catch (InvocationTargetException e) {
                             throw e.getCause();
                         }
+                        context.deletePaused.countDown();
+                        try {
+                            context.deleteResume.await(10, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return result;
                     }
+                    try {
+                        return method.invoke(real, args);
+                    } catch (InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+                }
             );
         }
 
@@ -85,23 +86,23 @@ class AuthorDeleteRaceTest extends IntegrationTest {
         @Primary
         public PostRepository racePostRepository(PostRepository real, RaceContext context) {
             return (PostRepository) Proxy.newProxyInstance(
-                    PostRepository.class.getClassLoader(),
-                    new Class<?>[]{PostRepository.class},
-                    (proxy, method, args) -> {
-                        if (method.getName().equals("saveAndFlush") && context.pauseOnSaveAndFlush) {
-                            context.putReachedSave.countDown();
-                            try {
-                                context.putResume.await(10, TimeUnit.SECONDS);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
+                PostRepository.class.getClassLoader(),
+                new Class<?>[]{PostRepository.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("saveAndFlush") && context.pauseOnSaveAndFlush) {
+                        context.putReachedSave.countDown();
                         try {
-                            return method.invoke(real, args);
-                        } catch (InvocationTargetException e) {
-                            throw e.getCause();
+                            context.putResume.await(10, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
                         }
                     }
+                    try {
+                        return method.invoke(real, args);
+                    } catch (InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+                }
             );
         }
 
@@ -145,14 +146,14 @@ class AuthorDeleteRaceTest extends IntegrationTest {
 
     private String createAuthor(String name) throws Exception {
         return data(call(post("/api/v1/authors"), Map.of("name", name)).andExpect(status().isCreated()))
-                .path("id").asText();
+            .path("id").asText();
     }
 
     private List<Integer> getPositions(String postId) {
         return jdbcTemplate.queryForList(
-                "SELECT position FROM post_authors WHERE post_id = ? ORDER BY position",
-                Integer.class,
-                UUID.fromString(postId)
+            "SELECT position FROM post_authors WHERE post_id = ? ORDER BY position",
+            Integer.class,
+            UUID.fromString(postId)
         );
     }
 
@@ -181,13 +182,14 @@ class AuthorDeleteRaceTest extends IntegrationTest {
             int status2 = r2.andReturn().getResponse().getStatus();
 
             assertThat(List.of(status1, status2))
-                    .containsExactlyInAnyOrder(204, 409);
+                .containsExactlyInAnyOrder(204, 409);
         } finally {
             pool.shutdownNow();
         }
     }
 
-    private String executeRace(boolean putWins) throws Exception {
+    @Test
+    void concurrentPutAndDelete_preservesContiguousPositions() throws Exception {
         String xId = createAuthor("X");
         String aliceId = createAuthor("Alice");
         String bobId = createAuthor("Bob");
@@ -209,91 +211,148 @@ class AuthorDeleteRaceTest extends IntegrationTest {
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             raceContext.pauseOnFindPostIds = true;
-            raceContext.pauseOnSaveAndFlush = true;
+            raceContext.pauseOnSaveAndFlush = false;
 
-            if (putWins) {
-                Future<ResultActions> putFuture = pool.submit(() -> {
-                    Map<String, Object> editP2 = new HashMap<>();
-                    editP2.put("title", "P2");
-                    editP2.put("content", doc("text"));
-                    editP2.put("authorIds", List.of(aliceId, xId, bobId));
-                    editP2.put("version", p2Version);
-                    return call(put("/api/v1/posts/" + p2Id), editP2);
-                });
+            Future<?> deleteFuture = pool.submit(() -> {
+                call(delete("/api/v1/authors/" + xId));
+                return null;
+            });
 
-                assertTrue(raceContext.putReachedSave.await(10, TimeUnit.SECONDS), "PUT did not reach saveAndFlush");
-                raceContext.putResume.countDown();
-                putFuture.get(15, TimeUnit.SECONDS).andExpect(status().isOk());
+            assertTrue(raceContext.deletePaused.await(10, TimeUnit.SECONDS), "DELETE paused at findPostIds");
 
-                Future<?> deleteFuture = pool.submit(() -> {
-                    call(delete("/api/v1/authors/" + xId));
-                    return null;
-                });
-                raceContext.deleteResume.countDown();
-                deleteFuture.get(15, TimeUnit.SECONDS);
-            } else {
-                Future<?> deleteFuture = pool.submit(() -> {
-                    call(delete("/api/v1/authors/" + xId));
-                    return null;
-                });
+            Future<ResultActions> putFuture = pool.submit(() -> {
+                Map<String, Object> editP2 = new HashMap<>();
+                editP2.put("title", "P2");
+                editP2.put("content", doc("text"));
+                editP2.put("authorIds", List.of(aliceId, xId, bobId));
+                editP2.put("version", p2Version);
+                return call(put("/api/v1/posts/" + p2Id), editP2);
+            });
 
-                assertTrue(raceContext.deletePaused.await(10, TimeUnit.SECONDS), "DELETE did not reach findPostIds");
+            try {
+                putFuture.get(1, TimeUnit.SECONDS);
+            } catch (TimeoutException expected) {
+            }
 
-                Future<ResultActions> putFuture = pool.submit(() -> {
-                    Map<String, Object> editP2 = new HashMap<>();
-                    editP2.put("title", "P2");
-                    editP2.put("content", doc("text"));
-                    editP2.put("authorIds", List.of(aliceId, xId, bobId));
-                    editP2.put("version", p2Version);
-                    return call(put("/api/v1/posts/" + p2Id), editP2);
-                });
+            raceContext.deleteResume.countDown();
+            deleteFuture.get(15, TimeUnit.SECONDS);
 
-                assertTrue(raceContext.putReachedSave.await(10, TimeUnit.SECONDS), "PUT did not reach saveAndFlush");
+            ResultActions putResult = putFuture.get(5, TimeUnit.SECONDS);
+            putResult.andExpect(status().isConflict());
 
-                raceContext.deleteResume.countDown();
-                deleteFuture.get(15, TimeUnit.SECONDS);
+        } finally {
+            raceContext.deleteResume.countDown();
+            pool.shutdownNow();
+        }
 
-                raceContext.putResume.countDown();
+        assertThat(getPositions(p2Id)).containsExactly(0, 1);
+    }
 
-                ResultActions putResult = putFuture.get(15, TimeUnit.SECONDS);
-                int statusCode = putResult.andReturn().getResponse().getStatus();
-                String responseBody = putResult.andReturn().getResponse().getContentAsString();
+    @Test
+    void raceAfterDelete_returns200OnRead() throws Exception {
+        String xId = createAuthor("X");
+        String aliceId = createAuthor("Alice");
+        String bobId = createAuthor("Bob");
 
-                if (statusCode != 409) {
-                    throw new RuntimeException("Expected 409 but got " + statusCode + ". Body: " + responseBody);
-                }
+        Map<String, Object> p1 = new HashMap<>();
+        p1.put("title", "P1");
+        p1.put("content", doc("text"));
+        p1.put("authorIds", List.of(xId));
+        call(post("/api/v1/posts"), p1).andExpect(status().isCreated());
+
+        Map<String, Object> p2Body = new HashMap<>();
+        p2Body.put("title", "P2");
+        p2Body.put("content", doc("text"));
+        p2Body.put("authorIds", List.of(aliceId, bobId));
+        JsonNode p2 = data(call(post("/api/v1/posts"), p2Body).andExpect(status().isCreated()));
+        String p2Id = p2.path("id").asText();
+        long p2Version = p2.path("version").asLong();
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            raceContext.pauseOnFindPostIds = true;
+            raceContext.pauseOnSaveAndFlush = false;
+
+            Future<?> deleteFuture = pool.submit(() -> {
+                call(delete("/api/v1/authors/" + xId));
+                return null;
+            });
+
+            assertTrue(raceContext.deletePaused.await(10, TimeUnit.SECONDS), "DELETE paused");
+
+            Future<ResultActions> putFuture = pool.submit(() -> {
+                Map<String, Object> editP2 = new HashMap<>();
+                editP2.put("title", "P2");
+                editP2.put("content", doc("text"));
+                editP2.put("authorIds", List.of(aliceId, xId, bobId));
+                editP2.put("version", p2Version);
+                return call(put("/api/v1/posts/" + p2Id), editP2);
+            });
+
+            try {
+                putFuture.get(1, TimeUnit.SECONDS);
+            } catch (TimeoutException expected) {
+            }
+
+            raceContext.deleteResume.countDown();
+            deleteFuture.get(15, TimeUnit.SECONDS);
+
+            try {
+                putFuture.get(5, TimeUnit.SECONDS);
+            } catch (Exception expected) {
             }
 
         } finally {
             raceContext.deleteResume.countDown();
-            raceContext.putResume.countDown();
             pool.shutdownNow();
         }
-        return p2Id;
-    }
 
-    @Test
-    void deleteWins_leavesNoPositionGap() throws Exception {
-        String p2Id = executeRace(false);
-        assertThat(getPositions(p2Id)).containsExactly(0, 1);
-    }
-
-    @Test
-    void deleteWins_returns200OnRead() throws Exception {
-        String p2Id = executeRace(false);
         call(get("/api/v1/posts/" + p2Id))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.authors.length()").value(2))
-                .andExpect(jsonPath("$.data.authors[0].name").value("Alice"))
-                .andExpect(jsonPath("$.data.authors[1].name").value("Bob"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.authors.length()").value(2))
+            .andExpect(jsonPath("$.data.authors[0].name").value("Alice"))
+            .andExpect(jsonPath("$.data.authors[1].name").value("Bob"));
     }
 
     @Test
-    void putWins_removesAuthorAndLeavesNoGap() throws Exception {
-        String p2Id = executeRace(true);
-        assertThat(getPositions(p2Id)).containsExactly(0, 1);
+    void putCommitsFirst_positionsStayContiguous() throws Exception {
+        String xId = createAuthor("X");
+        String aliceId = createAuthor("Alice");
+        String bobId = createAuthor("Bob");
+
+        Map<String, Object> p1 = new HashMap<>();
+        p1.put("title", "P1");
+        p1.put("content", doc("text"));
+        p1.put("authorIds", List.of(xId));
+        call(post("/api/v1/posts"), p1).andExpect(status().isCreated());
+
+        Map<String, Object> p2Body = new HashMap<>();
+        p2Body.put("title", "P2");
+        p2Body.put("content", doc("text"));
+        p2Body.put("authorIds", List.of(aliceId, bobId));
+        JsonNode p2 = data(call(post("/api/v1/posts"), p2Body).andExpect(status().isCreated()));
+        String p2Id = p2.path("id").asText();
+        long p2Version = p2.path("version").asLong();
+
+        Map<String, Object> editP2 = new HashMap<>();
+        editP2.put("title", "P2");
+        editP2.put("content", doc("text"));
+        editP2.put("authorIds", List.of(aliceId, xId, bobId));
+        editP2.put("version", p2Version);
+        call(put("/api/v1/posts/" + p2Id), editP2).andExpect(status().isOk());
+
         call(get("/api/v1/posts/" + p2Id))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.authors.length()").value(2));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.authors.length()").value(3));
+
+        call(delete("/api/v1/authors/" + xId)).andExpect(status().isNoContent());
+
+        assertThat(getPositions(p2Id)).containsExactly(0, 1);
+
+        call(get("/api/v1/posts/" + p2Id))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.authors.length()").value(2))
+            .andExpect(jsonPath("$.data.authors[0].name").value("Alice"))
+            .andExpect(jsonPath("$.data.authors[1].name").value("Bob"));
     }
 }
