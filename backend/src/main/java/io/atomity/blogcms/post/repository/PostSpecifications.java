@@ -37,8 +37,8 @@ public final class PostSpecifications {
     }
 
     /**
-     * Case-insensitive substring match on title, excerpt, slug and body text. Uses ILIKE,
-     * which the pg_trgm indexes from V1 can serve.
+     * Case-insensitive substring match on title, excerpt, slug, body text and ideal audience. Uses ILIKE;
+     * pg_trgm indexes from V1 serve the indexed text fields.
      */
     public static Specification<Post> matches(String q) {
         if (q == null || q.isBlank()) {
@@ -51,7 +51,8 @@ public final class PostSpecifications {
                     hcb.ilike(root.get("title"), pattern, '\\'),
                     hcb.ilike(root.get("excerpt"), pattern, '\\'),
                     hcb.ilike(root.get("slug"), pattern, '\\'),
-                    hcb.ilike(root.get("contentText"), pattern, '\\'));
+                    hcb.ilike(root.get("contentText"), pattern, '\\'),
+                    hcb.ilike(root.get("idealFor"), pattern, '\\'));
         };
     }
 

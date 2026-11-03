@@ -107,3 +107,14 @@ describe("snapshotOf", () => {
     expect(snapshotOf({ ...sent, tagIds: ["t1"] })).not.toBe(snapshotOf(sent));
   });
 });
+
+describe("ideal for audience field", () => {
+  it("tracks audience changes as unsaved form changes", () => {
+    expect(snapshotOf({ ...sent, idealFor: "CIO, Head of IT" })).not.toBe(snapshotOf(sent));
+  });
+
+  it("validates the audience field length", () => {
+    const form = { ...EMPTY_FORM, idealFor: "x".repeat(301) };
+    expect(validateForm(form).idealFor).toBe("Keep this field under 300 characters.");
+  });
+});

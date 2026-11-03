@@ -36,6 +36,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -231,7 +232,7 @@ public class PostService {
                 : markdownSourceRepository.findById(request.markdownSourceId())
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The Markdown file does not exist"));
 
-        return new PostEdit(title, resolveSlug(request.slug(), title, selfId), clean(request.excerpt()),
+        return new PostEdit(title, resolveSlug(request.slug(), title, selfId), clean(request.excerpt()), normalizeIdealFor(request.idealFor()),
                 request.content(), content.text(), content.wordCount(), content.readingTimeMinutes(),
                 cover, clean(request.coverImageAlt()), markdownSource, clean(request.seoTitle()), clean(request.metaDescription()),
                 clean(request.focusKeyword()), clean(request.canonicalUrl()), Boolean.TRUE.equals(request.featured()),
@@ -274,6 +275,27 @@ public class PostService {
 
     private static String clean(String value) {
         return value == null ? "" : value.strip();
+    }
+
+    /** Normalize the optional comma-separated audience label while preserving first-seen display casing. */
+    private static String normalizeIdealFor(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+
+        Map<String, String> unique = new LinkedHashMap<>();
+        for (String rawEntry : value.split(",", -1)) {
+            String entry = rawEntry.strip();
+            if (!entry.isEmpty()) {
+                unique.putIfAbsent(entry.toLowerCase(Locale.ROOT), entry);
+            }
+        }
+
+        String normalized = String.join(", ", unique.values());
+        if (normalized.length() > 300) {
+            throw ApiException.badRequest("VALIDATION_ERROR", "idealFor must be at most 300 characters after normalization");
+        }
+        return normalized;
     }
 
     private static String truncate(String value, int max) {

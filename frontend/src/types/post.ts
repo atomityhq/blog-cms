@@ -15,6 +15,7 @@ export interface PostSummary {
   title: string;
   slug: string;
   excerpt: string;
+  idealFor: string;
   status: PostStatus;
   featured: boolean;
   authors: AuthorRef[];
@@ -47,6 +48,7 @@ export interface PostInput {
   title: string;
   slug: string;
   excerpt: string;
+  idealFor: string;
   content: ContentDoc;
   coverImageId: string | null;
   coverImageAlt: string;
@@ -79,6 +81,7 @@ export interface PostListParams {
 export const POST_LIMITS = {
   title: 200,
   excerpt: 300,
+  idealFor: 300,
   seoTitle: 70,
   metaDescription: 160,
   focusKeyword: 100,

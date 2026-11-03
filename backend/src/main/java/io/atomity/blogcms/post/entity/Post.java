@@ -54,6 +54,10 @@ public class Post {
     @Column(name = "excerpt", nullable = false)
     private String excerpt;
 
+    /** Comma-separated audience roles, e.g. "CIO, Head of IT". */
+    @Column(name = "ideal_for", nullable = false, length = 300)
+    private String idealFor;
+
     /** Tiptap/ProseMirror document, stored as jsonb. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "content", nullable = false, columnDefinition = "jsonb")
@@ -154,6 +158,7 @@ public class Post {
         this.title = edit.title();
         this.slug = edit.slug();
         this.excerpt = edit.excerpt();
+        this.idealFor = edit.idealFor();
         this.content = edit.content();
         this.contentText = edit.contentText();
         this.wordCount = edit.wordCount();
@@ -212,7 +217,7 @@ public class Post {
         copy.id = UUID.randomUUID();
         copy.status = PostStatus.DRAFT;
         copy.createdAt = Timestamps.now();
-        copy.edit(new PostEdit(newTitle, newSlug, excerpt, content.deepCopy(), contentText, wordCount, readingTimeMinutes,
+        copy.edit(new PostEdit(newTitle, newSlug, excerpt, idealFor, content.deepCopy(), contentText, wordCount, readingTimeMinutes,
                 coverImage, coverImageAlt, markdownSource, seoTitle, metaDescription, focusKeyword, canonicalUrl, false,
                 authors, tags, inlineImages, audiences.stream()
                         .map(a -> new AudienceAssignment(a.getAudience(), a.getType())).toList()));
@@ -233,6 +238,7 @@ public class Post {
     public String getTitle() { return title; }
     public String getSlug() { return slug; }
     public String getExcerpt() { return excerpt; }
+    public String getIdealFor() { return idealFor; }
     public JsonNode getContent() { return content; }
     public PostStatus getStatus() { return status; }
     public boolean isFeatured() { return featured; }

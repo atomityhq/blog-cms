@@ -38,6 +38,7 @@ import { listTags } from "@/modules/tags/api";
 import type { PostSortKey, PostStatus, PostSummary } from "@/types/post";
 import { archivePost, countPostsByStatus, deletePost, duplicatePost, listPosts, publishPost, unpublishPost } from "./api";
 import { buildPostListParams, reconcilePostListPage } from "./list-page-reconciliation";
+import { uniqueIdealForEntries } from "./idealFor";
 
 type StatusTab = PostStatus | "ALL";
 
@@ -205,6 +206,14 @@ export function PostsListCanvas() {
               {post.featured && <Star size={12} className="shrink-0 fill-[var(--atomity-orange)] text-[var(--atomity-orange)]" aria-label="Featured" />}
             </div>
             <div className="truncate font-mono text-[11px] text-muted">/{post.slug}</div>
+            {post.idealFor.trim() && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <span className="text-[10px] text-muted">Ideal for:</span>
+                {uniqueIdealForEntries(post.idealFor).slice(0, 3).map((role) => (
+                  <StatusChip key={role.toLocaleLowerCase("en-US")} tone="neutral" className="!normal-case !tracking-normal">{role}</StatusChip>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ),

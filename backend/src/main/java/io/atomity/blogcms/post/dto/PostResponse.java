@@ -20,6 +20,7 @@ public record PostResponse(
         String title,
         String slug,
         String excerpt,
+        String idealFor,
         PostStatus status,
         boolean featured,
         List<AuthorRef> authors,
@@ -42,7 +43,7 @@ public record PostResponse(
         long version) {
 
     public static PostResponse of(Post post) {
-        return new PostResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getStatus(),
+        return new PostResponse(post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getIdealFor(), post.getStatus(),
                 post.isFeatured(), PostSummaryResponse.authorRefs(post), PostSummaryResponse.tagRefs(post),
                 PostSummaryResponse.audienceRefs(post, AudienceType.PRIMARY),
                 PostSummaryResponse.audienceRefs(post, AudienceType.SECONDARY),

@@ -101,6 +101,23 @@ class BlogApiTest extends IntegrationTest {
     }
 
     @Test
+    void idealForIsExposedInPublicBlogListAndDetail() throws Exception {
+        Map<String, Object> body = postBody("Audience guide", doc("Useful guidance."));
+        body.put("idealFor", "CIO, CISO");
+        JsonNode created = data(call(post("/api/v1/posts"), body).andExpect(status().isCreated()));
+        String id = created.path("id").asText();
+        publish(id);
+
+        mockMvc.perform(get("/api/v1/blogs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].idealFor").value("CIO, CISO"));
+
+        mockMvc.perform(get("/api/v1/blogs/slug/audience-guide"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.idealFor").value("CIO, CISO"));
+    }
+
+    @Test
     void listRejectsPageWhenOffsetExceedsIntegerMaxValue() throws Exception {
         call(get("/api/v1/blogs?page=2147483647"))
             .andExpect(status().isBadRequest())
@@ -208,6 +225,7 @@ class BlogApiTest extends IntegrationTest {
     @Test
     void listSearchesAcrossTitleExcerptSlugAndBodyText() throws Exception {
         Map<String, Object> postA = postBody("Rightsizing Pods", doc("Node memory capacity."));
+        postA.put("idealFor", "CISO");
         String idA = data(call(post("/api/v1/posts"), postA).andExpect(status().isCreated())).path("id").asText();
         publish(idA);
 
@@ -239,6 +257,12 @@ class BlogApiTest extends IntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].id").value(idB));
+
+        // Ideal-for labels participate in public search, case-insensitively.
+        mockMvc.perform(get("/api/v1/blogs?q=ciso"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].idealFor").value("CISO"));
 
         // Content text match
         mockMvc.perform(get("/api/v1/blogs?q=replication"))

@@ -69,6 +69,7 @@ class PostApiTest extends IntegrationTest {
 
         assertThat(created.path("status").asText()).isEqualTo("DRAFT");
         assertThat(created.path("slug").asText()).isEqualTo("hello-world");
+        assertThat(created.path("idealFor").asText()).isEmpty();
         assertThat(created.path("wordCount").asInt()).isEqualTo(6);
         assertThat(created.path("readingTimeMinutes").asInt()).isEqualTo(1);
         assertThat(created.path("publishedAt").isNull()).isTrue();
@@ -78,6 +79,50 @@ class PostApiTest extends IntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.title").value("Hello, Wörld!"))
                 .andExpect(jsonPath("$.data.content.content[0].content[0].text").value("One two three four."));
+    }
+
+    @Test
+    void idealForIsNormalizedOnCreateAndUpdateAndValidatedAtTheLengthBoundary() throws Exception {
+        Map<String, Object> body = postBody("Audience post", doc("Useful content"));
+        body.put("idealFor", "  CISO ,, ciso, Head of IT, , CIO, ");
+        JsonNode created = data(call(post("/api/v1/posts"), body).andExpect(status().isCreated()));
+        String id = created.path("id").asText();
+
+        assertThat(created.path("idealFor").asText()).isEqualTo("CISO, Head of IT, CIO");
+        call(get("/api/v1/posts/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.idealFor").value("CISO, Head of IT, CIO"));
+        call(get("/api/v1/posts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].idealFor").value("CISO, Head of IT, CIO"));
+
+        body.put("idealFor", "  CIO, cio,, Head of IT,  ");
+        body.put("version", created.path("version").asLong());
+        JsonNode updated = data(call(put("/api/v1/posts/" + id), body).andExpect(status().isOk()));
+        assertThat(updated.path("idealFor").asText()).isEqualTo("CIO, Head of IT");
+
+        body.put("idealFor", "   ,,   ");
+        body.put("version", updated.path("version").asLong());
+        JsonNode blankUpdated = data(call(put("/api/v1/posts/" + id), body).andExpect(status().isOk()));
+        assertThat(blankUpdated.path("idealFor").asText()).isEmpty();
+
+        body.put("title", "Audience maximum length");
+        body.put("idealFor", "x".repeat(300));
+        body.remove("version");
+        JsonNode boundary = data(call(post("/api/v1/posts"), body).andExpect(status().isCreated()));
+        assertThat(boundary.path("idealFor").asText()).hasSize(300);
+
+        body.put("title", "Invalid audience");
+        body.put("idealFor", "x".repeat(301));
+        call(post("/api/v1/posts"), body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("VALIDATION_ERROR"));
+
+        body.put("idealFor", String.join(",", java.util.stream.IntStream.range(0, 75)
+                .mapToObj(i -> "x" + i).toList()));
+        call(post("/api/v1/posts"), body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -345,7 +390,9 @@ class PostApiTest extends IntegrationTest {
         Map<String, Object> tagged = postBody("Rightsizing pods", doc("Kubernetes requests and limits."));
         tagged.put("tagIds", List.of(tag));
         call(post("/api/v1/posts"), tagged).andExpect(status().isCreated());
-        createPost("Carbon footprint", "Grid mix matters.");
+        Map<String, Object> audiencePost = postBody("Carbon footprint", doc("Grid mix matters."));
+        audiencePost.put("idealFor", "CISO");
+        call(post("/api/v1/posts"), audiencePost).andExpect(status().isCreated());
         String published = createPost("Spot instances", "Interruptions happen.").path("id").asText();
         call(post("/api/v1/posts/" + published + "/publish")).andExpect(status().isOk());
 
@@ -361,6 +408,10 @@ class PostApiTest extends IntegrationTest {
         // Substring search covers the body text, case-insensitively.
         call(get("/api/v1/posts?q=GRID")).andExpect(jsonPath("$.data.length()").value(1))
             .andExpect(jsonPath("$.data[0].title").value("Carbon footprint"));
+        // Audience labels are searchable and matching is case-insensitive.
+        call(get("/api/v1/posts?q=ciso")).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].idealFor").value("CISO"));
+        call(get("/api/v1/posts?q=CISO")).andExpect(jsonPath("$.data.length()").value(1));
         // % is matched literally, not as a wildcard.
         call(get("/api/v1/posts?q=%25")).andExpect(jsonPath("$.data.length()").value(0));
 
