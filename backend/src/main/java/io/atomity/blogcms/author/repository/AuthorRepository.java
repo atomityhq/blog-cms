@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -21,6 +22,9 @@ public interface AuthorRepository extends JpaRepository<Author, UUID> {
     boolean existsBySlug(String slug);
 
     boolean existsBySlugAndIdNot(String slug, UUID id);
+
+    @Query(value = "SELECT * FROM authors WHERE id = :id FOR UPDATE", nativeQuery = true)
+    Optional<Author> findByIdForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT author_id AS authorId, COUNT(*) AS postCount FROM post_authors GROUP BY author_id", nativeQuery = true)
     List<PostCount> countPostsPerAuthor();
@@ -51,7 +55,7 @@ public interface AuthorRepository extends JpaRepository<Author, UUID> {
 
     @Modifying
     @Query(value = "UPDATE post_authors SET position = -position - 1 WHERE post_id IN (:postIds) AND position < 0",
-            nativeQuery = true)
+        nativeQuery = true)
     void renumberPositionsStepTwo(@Param("postIds") Collection<UUID> postIds);
 
     interface PostCount {

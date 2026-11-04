@@ -30,10 +30,10 @@ public class AuthorService {
     @Transactional(readOnly = true)
     public List<AuthorResponse> list() {
         Map<UUID, Long> counts = authorRepository.countPostsPerAuthor().stream()
-                .collect(Collectors.toMap(AuthorRepository.PostCount::getAuthorId, AuthorRepository.PostCount::getPostCount));
+            .collect(Collectors.toMap(AuthorRepository.PostCount::getAuthorId, AuthorRepository.PostCount::getPostCount));
         return authorRepository.findAllByOrderByNameAsc().stream()
-                .map(author -> AuthorResponse.of(author, counts.getOrDefault(author.getId(), 0L)))
-                .toList();
+            .map(author -> AuthorResponse.of(author, counts.getOrDefault(author.getId(), 0L)))
+            .toList();
     }
 
     @Transactional
@@ -53,7 +53,12 @@ public class AuthorService {
     /** The author is taken off every post that credits them; the posts themselves stay. */
     @Transactional
     public void delete(UUID id) {
-        Author author = get(id);
+        authorRepository.findById(id)
+            .orElseThrow(() -> ApiException.notFound("Author"));
+
+        Author author = authorRepository.findByIdForUpdate(id)
+            .orElseThrow(() -> ApiException.conflict("CONFLICT", "The author was deleted by another transaction"));
+
         List<UUID> postIds = authorRepository.findPostIds(id);
         if (!postIds.isEmpty()) {
             authorRepository.removeFromAllPosts(id);
@@ -87,6 +92,6 @@ public class AuthorService {
         // MediaService.get() is not used because it throws 404 for URL-based media lookup,
         // whereas avatarId is a request body reference.
         return mediaRepository.findById(avatarId)
-                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The avatar image does not exist"));
+            .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REFERENCE", "The avatar image does not exist"));
     }
 }
