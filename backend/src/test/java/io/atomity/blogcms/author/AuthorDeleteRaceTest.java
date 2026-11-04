@@ -73,6 +73,13 @@ class AuthorDeleteRaceTest extends IntegrationTest {
                         }
                         return result;
                     }
+
+                    // Signal that DELETE has entered the locking method — the very next
+                    // statement is the FOR UPDATE that will block until the PUT commits.
+                    if (method.getName().equals("findByIdForUpdate") && context.pauseOnFindByIdForUpdate) {
+                        context.deleteAboutToLock.countDown();
+                    }
+
                     try {
                         return method.invoke(real, args);
                     } catch (InvocationTargetException e) {
@@ -89,6 +96,13 @@ class AuthorDeleteRaceTest extends IntegrationTest {
                 PostRepository.class.getClassLoader(),
                 new Class<?>[]{PostRepository.class},
                 (proxy, method, args) -> {
+                    Object result = null;
+                    try {
+                        result = method.invoke(real, args);
+                    } catch (InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+
                     if (method.getName().equals("saveAndFlush") && context.pauseOnSaveAndFlush) {
                         context.putReachedSave.countDown();
                         try {
@@ -97,11 +111,7 @@ class AuthorDeleteRaceTest extends IntegrationTest {
                             Thread.currentThread().interrupt();
                         }
                     }
-                    try {
-                        return method.invoke(real, args);
-                    } catch (InvocationTargetException e) {
-                        throw e.getCause();
-                    }
+                    return result;
                 }
             );
         }
@@ -117,6 +127,9 @@ class AuthorDeleteRaceTest extends IntegrationTest {
         public CountDownLatch deleteResume;
         public boolean pauseOnFindPostIds;
 
+        public CountDownLatch deleteAboutToLock;
+        public boolean pauseOnFindByIdForUpdate;
+
         public CountDownLatch putReachedSave;
         public CountDownLatch putResume;
         public boolean pauseOnSaveAndFlush;
@@ -129,6 +142,9 @@ class AuthorDeleteRaceTest extends IntegrationTest {
             deletePaused = new CountDownLatch(1);
             deleteResume = new CountDownLatch(1);
             pauseOnFindPostIds = false;
+
+            deleteAboutToLock = new CountDownLatch(1);
+            pauseOnFindByIdForUpdate = false;
 
             putReachedSave = new CountDownLatch(1);
             putResume = new CountDownLatch(1);
@@ -155,6 +171,52 @@ class AuthorDeleteRaceTest extends IntegrationTest {
             Integer.class,
             UUID.fromString(postId)
         );
+    }
+
+    /**
+     * Waits until our DELETE backend is blocked on the FOR UPDATE row-lock of the authors row.
+     *
+     * Notes:
+     *  - Row-lock waits appear in pg_locks as an ungranted transactionid entry (the holder's xid),
+     *    NOT as a tuple entry. We must NOT filter by database: transactionid locks have database IS NULL,
+     *    so 'database = current_database()' would drop every row and the poll would always time out.
+     *  - The blocking statement for the fixed code is 'SELECT * FROM authors WHERE id = ? FOR UPDATE',
+     *    not 'DELETE FROM authors'. Filtering by '%authors%' matches both the fixed and the broken case.
+     *  - wait_event_type = 'Lock' is more specific than state = 'active'.
+     */
+    private void awaitDbLock() {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            Long count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_locks pl " +
+                    "JOIN pg_stat_activity a ON pl.pid = a.pid " +
+                    "WHERE NOT pl.granted " +
+                    "  AND pl.locktype = 'transactionid' " +
+                    "  AND a.wait_event_type = 'Lock' " +
+                    "  AND a.query ILIKE '%authors%'",
+                Long.class);
+            if (count != null && count > 0) {
+                return;
+            }
+            try {
+                Thread.sleep(50); // polling interval — exits as soon as the lock shows up
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+        throw new AssertionError("Timed out waiting for DELETE to block on the authors row");
+    }
+
+    private void shutdownAndAwait(ExecutorService pool) {
+        pool.shutdownNow();
+        try {
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                System.err.println("WARN: thread pool did not terminate within 5s after shutdownNow");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Test
@@ -184,7 +246,7 @@ class AuthorDeleteRaceTest extends IntegrationTest {
             assertThat(List.of(status1, status2))
                 .containsExactlyInAnyOrder(204, 409);
         } finally {
-            pool.shutdownNow();
+            shutdownAndAwait(pool);
         }
     }
 
@@ -242,7 +304,7 @@ class AuthorDeleteRaceTest extends IntegrationTest {
 
         } finally {
             raceContext.deleteResume.countDown();
-            pool.shutdownNow();
+            shutdownAndAwait(pool);
         }
 
         assertThat(getPositions(p2Id)).containsExactly(0, 1);
@@ -304,7 +366,7 @@ class AuthorDeleteRaceTest extends IntegrationTest {
 
         } finally {
             raceContext.deleteResume.countDown();
-            pool.shutdownNow();
+            shutdownAndAwait(pool);
         }
 
         call(get("/api/v1/posts/" + p2Id))
@@ -315,7 +377,7 @@ class AuthorDeleteRaceTest extends IntegrationTest {
     }
 
     @Test
-    void putCommitsFirst_positionsStayContiguous() throws Exception {
+    void concurrentPutFirst_preservesContiguousPositions() throws Exception {
         String xId = createAuthor("X");
         String aliceId = createAuthor("Alice");
         String bobId = createAuthor("Bob");
@@ -334,18 +396,39 @@ class AuthorDeleteRaceTest extends IntegrationTest {
         String p2Id = p2.path("id").asText();
         long p2Version = p2.path("version").asLong();
 
-        Map<String, Object> editP2 = new HashMap<>();
-        editP2.put("title", "P2");
-        editP2.put("content", doc("text"));
-        editP2.put("authorIds", List.of(aliceId, xId, bobId));
-        editP2.put("version", p2Version);
-        call(put("/api/v1/posts/" + p2Id), editP2).andExpect(status().isOk());
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            raceContext.pauseOnSaveAndFlush = true;
+            raceContext.pauseOnFindPostIds = false;
+            raceContext.pauseOnFindByIdForUpdate = true;
 
-        call(get("/api/v1/posts/" + p2Id))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.authors.length()").value(3));
+            Future<ResultActions> putFuture = pool.submit(() -> {
+                Map<String, Object> editP2 = new HashMap<>();
+                editP2.put("title", "P2");
+                editP2.put("content", doc("text"));
+                editP2.put("authorIds", List.of(aliceId, xId, bobId));
+                editP2.put("version", p2Version);
+                return call(put("/api/v1/posts/" + p2Id), editP2);
+            });
 
-        call(delete("/api/v1/authors/" + xId)).andExpect(status().isNoContent());
+            assertTrue(raceContext.putReachedSave.await(10, TimeUnit.SECONDS), "PUT paused after saveAndFlush");
+
+            Future<ResultActions> deleteFuture = pool.submit(() -> call(delete("/api/v1/authors/" + xId)));
+
+            // DELETE has entered findByIdForUpdate; wait until the FOR UPDATE actually blocks in the DB.
+            assertTrue(raceContext.deleteAboutToLock.await(5, TimeUnit.SECONDS),
+                "DELETE reached findByIdForUpdate");
+            awaitDbLock();
+
+            raceContext.putResume.countDown();
+
+            putFuture.get(15, TimeUnit.SECONDS).andExpect(status().isOk());
+            deleteFuture.get(15, TimeUnit.SECONDS).andExpect(status().isNoContent());
+
+        } finally {
+            raceContext.putResume.countDown();
+            shutdownAndAwait(pool);
+        }
 
         assertThat(getPositions(p2Id)).containsExactly(0, 1);
 
