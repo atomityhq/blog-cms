@@ -153,6 +153,20 @@ class PostApiTest extends IntegrationTest {
     }
 
     @Test
+    void postRequiresAnArrayForDocumentChildren() throws Exception {
+        var paragraph = Map.of("type", "paragraph", "content", List.of(Map.of("type", "text", "text", "Hello world")));
+        var invalid = Map.<String, Object>of("type", "doc", "content", Map.of("oops", paragraph));
+        call(post("/api/v1/posts"), postBody("Document shape", invalid))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("INVALID_CONTENT"));
+
+        var valid = Map.<String, Object>of("type", "doc", "content", List.of(paragraph));
+        call(post("/api/v1/posts"), postBody("Document shape", valid))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.wordCount").value(2));
+    }
+
+    @Test
     void unsafeLinksAreRejected() throws Exception {
         Map<String, Object> link = Map.of("type", "link", "attrs", Map.of("href", "javascript:alert(1)"));
         Map<String, Object> content = Map.of("type", "doc", "content", List.of(Map.of("type", "paragraph",

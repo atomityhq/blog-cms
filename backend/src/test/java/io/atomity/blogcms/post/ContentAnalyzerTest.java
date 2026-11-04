@@ -118,6 +118,13 @@ class ContentAnalyzerTest {
     }
 
     @Test
+    void rejectsObjectValuedChildrenInsideAParagraph() {
+        assertThatThrownBy(() -> ContentAnalyzer.analyze(parse("""
+                {'type':'doc','content':[{'type':'paragraph','content':{'oops':{'type':'text','text':'Hello'}}}]}""")))
+                .isInstanceOf(ApiException.class).extracting("errorCode").isEqualTo("INVALID_CONTENT");
+    }
+
+    @Test
     void rejectsNonDocuments() {
         assertThatThrownBy(() -> ContentAnalyzer.analyze(parse("{'type':'paragraph'}")))
                 .isInstanceOf(ApiException.class).extracting("errorCode").isEqualTo("INVALID_CONTENT");
