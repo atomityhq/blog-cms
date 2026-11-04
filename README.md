@@ -214,8 +214,9 @@ If Nextcloud is unavailable, file uploads and downloads fail with a `503 Service
 
 Remote file deletion is best-effort. The corresponding database record is deleted first; if the remote deletion fails, the file may remain in Nextcloud and require manual cleanup.
 
-Database-backed operations that do not access stored files do not make direct calls to Nextcloud. However, the local profile still requires the Nextcloud configuration variables to be set, even when performing these operations.
+The backend can start with the local profile even when the Nextcloud environment variables are not set, and database-backed features that do not access stored files remain available.
 
+File upload requests fail with `400 BAD_REQUEST` when the Nextcloud environment variables are absent. If the variables are configured with placeholder values or point to an unreachable Nextcloud instance, upload requests fail with `503 Service Unavailable` (`MEDIA_STORAGE_UNAVAILABLE`).
 ### Useful commands
 
 | Command      | What it does                                                   |
