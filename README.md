@@ -159,14 +159,64 @@ With the defaults from `.env.example` you sign in as **admin@example.com / admin
 
 Requires **Java 21**, **Node.js ≥ 20.9** with **npm ≥ 11.16**, and Docker (for Postgres and backend tests).
 
+### 1. Configure environment
+
+The backend uses the root `.env` file for local configuration. Create it from the example before starting the backend:
+
+```bash
+cp .env.example .env
+```
+
+Open the root `.env` file and configure the required Nextcloud credentials:
+
+```dotenv
+NEXTCLOUD_URL=https://your-nextcloud-instance
+NEXTCLOUD_USERNAME=your-username
+NEXTCLOUD_PASSWORD=your-app-password
+```
+
+Use a reachable Nextcloud instance and valid credentials with permission to access the configured remote directory. A dedicated Nextcloud app password is recommended where supported.
+
+`NEXTCLOUD_REMOTE_DIRECTORY` is optional and defaults to `/BlogCMS`. Set it in `.env` only when you want to use a different remote directory.
+
+The values in `.env.example` are placeholders and will not connect to a real Nextcloud instance. Keep your credentials private and never commit `.env` to the repository.
+
+### 2. Start local services
+
+Start PostgreSQL and the backend:
+
 ```bash
 make db                                   # start Postgres only
 make backend                              # Spring Boot on :8080 (profile: local)
+```
 
+`make backend` loads the root `.env` file and starts Spring Boot using the `local` profile.
+
+Set up and start the frontend:
+
+```bash
 cp frontend/.env.example frontend/.env.local
 make install && make frontend             # Next.js on :3000 (also enables the git hooks)
 ```
 
+### 3. Nextcloud storage behavior
+
+The backend uses Nextcloud through WebDAV to store uploaded images and Markdown source files.
+
+A working Nextcloud instance is required for the following operations:
+
+- Uploading images and Markdown source files.
+- Retrieving stored image and Markdown file contents.
+
+The backend automatically creates the required remote directories when uploading files.
+
+If Nextcloud is unavailable, file uploads and downloads fail with a `503 Service Unavailable` response (`MEDIA_STORAGE_UNAVAILABLE`).
+
+Remote file deletion is best-effort. The corresponding database record is deleted first; if the remote deletion fails, the file may remain in Nextcloud and require manual cleanup.
+
+The backend can start with the local profile even when the Nextcloud environment variables are not set, and database-backed features that do not access stored files remain available.
+
+File upload requests fail with `400 BAD_REQUEST` when the Nextcloud environment variables are absent. If the variables are configured with placeholder values or point to an unreachable Nextcloud instance, upload requests fail with `503 Service Unavailable` (`MEDIA_STORAGE_UNAVAILABLE`).
 ### Useful commands
 
 | Command      | What it does                                                   |
