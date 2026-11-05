@@ -46,4 +46,19 @@ class LoginRateLimiterTest {
         limiter.recordFailure("ip");
         assertThat(limiter.retryAfter("ip")).isZero();
     }
+
+    @Test
+    void expiredEntriesAreCleanedWhenCapacityIsReached() {
+        var clock = new MutableClock();
+        var limiter = new LoginRateLimiter(clock);
+
+        for (int i = 0; i < LoginRateLimiter.MAX_TRACKED_CLIENTS; i++) {
+            limiter.recordFailure("client-" + i);
+        }
+
+        clock.advance(LoginRateLimiter.WINDOW.plusSeconds(1));
+        limiter.recordFailure("new-client");
+
+        assertThat(limiter.retryAfter("new-client")).isZero();
+    }
 }
