@@ -14,12 +14,45 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 class TagCrudApiTest extends IntegrationTest {
 
     private JsonNode createTag(String name) throws Exception {
         return data(call(post("/api/v1/tags"), Map.of("name", name))
             .andExpect(status().isCreated()));
+    }
+
+    private JsonNode createPost(String title, String tagId) throws Exception {
+        Map<String, Object> content = Map.of(
+            "type", "doc",
+            "content", List.of(
+                Map.of("type", "paragraph",
+                    "content", List.of(
+                        Map.of("type", "text", "text", "Post body")
+                    )
+                )
+            )
+        );
+
+        Map<String, Object> body = Map.of(
+            "title", title,
+            "content", content,
+            "tagIds", List.of(tagId)
+        );
+
+        return data(call(post("/api/v1/posts"), body)
+            .andExpect(status().isCreated()));
+    }
+
+    private long postCountFor(JsonNode tags, String tagId) {
+        for (JsonNode tag : tags) {
+            if (tag.path("id").asText().equals(tagId)) {
+                return tag.path("postCount").asLong();
+            }
+        }
+
+        throw new AssertionError("Tag not found in listing: " + tagId);
     }
 
     @Test
@@ -88,4 +121,23 @@ class TagCrudApiTest extends IntegrationTest {
 
         assertThat(tag.path("slug").asText()).isEqualTo("symbols");
     }
+
+    @Test
+    void listReportsCorrectPostCountsForEachTag() throws Exception {
+        String emptyTagId = createTag("Alpha empty").path("id").asText();
+        String onePostTagId = createTag("Beta one").path("id").asText();
+        String twoPostsTagId = createTag("Gamma two").path("id").asText();
+
+        createPost("First post", onePostTagId);
+        createPost("Second post", twoPostsTagId);
+        createPost("Third post", twoPostsTagId);
+
+        JsonNode tags = data(call(get("/api/v1/tags"))
+            .andExpect(status().isOk()));
+
+        assertThat(postCountFor(tags, emptyTagId)).isZero();
+        assertThat(postCountFor(tags, onePostTagId)).isEqualTo(1);
+        assertThat(postCountFor(tags, twoPostsTagId)).isEqualTo(2);
+    }
+
 }
