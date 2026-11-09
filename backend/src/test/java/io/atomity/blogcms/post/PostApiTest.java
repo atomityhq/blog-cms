@@ -532,12 +532,14 @@ class PostApiTest extends IntegrationTest {
         call(get("/api/v1/authors")).andExpect(jsonPath("$.data[0].postCount").value(1));
     }
 
+
     @Test
     void deletingATagKeepsItsPostsAndRemovesTheAssociation() throws Exception {
         String tag = createTag("Temporary");
+        String survivingTag = createTag("Persistent");
 
         Map<String, Object> firstBody = postBody("First tagged post", doc("First content"));
-        firstBody.put("tagIds", List.of(tag));
+        firstBody.put("tagIds", List.of(tag, survivingTag));
 
         String firstId = data(call(post("/api/v1/posts"), firstBody)
             .andExpect(status().isCreated()))
@@ -550,11 +552,11 @@ class PostApiTest extends IntegrationTest {
             .andExpect(status().isCreated()))
             .path("id").asText();
 
-        // Delete the tag.
+        // Delete the original tag.
         call(delete("/api/v1/tags/" + tag))
             .andExpect(status().isNoContent());
 
-        // Both posts must still exist, but no longer be associated with the deleted tag.
+        // Both posts must still exist.
         JsonNode firstPost = data(call(get("/api/v1/posts/" + firstId))
             .andExpect(status().isOk()));
 
@@ -563,11 +565,23 @@ class PostApiTest extends IntegrationTest {
 
         assertThat(firstPost.path("id").asText()).isEqualTo(firstId);
         assertThat(firstPost.path("title").asText()).isEqualTo("First tagged post");
-        assertThat(firstPost.path("tags").size()).isZero();
 
         assertThat(secondPost.path("id").asText()).isEqualTo(secondId);
         assertThat(secondPost.path("title").asText()).isEqualTo("Second tagged post");
+
+        // Only the deleted tag association should be removed.
+        assertThat(firstPost.path("tags").findValuesAsText("id"))
+            .containsExactly(survivingTag);
+
         assertThat(secondPost.path("tags").size()).isZero();
+
+        // The surviving tag must still have the correct post count.
+        JsonNode remainingTags = data(call(get("/api/v1/tags"))
+            .andExpect(status().isOk()));
+
+        assertThat(remainingTags.size()).isEqualTo(1);
+        assertThat(remainingTags.get(0).path("id").asText()).isEqualTo(survivingTag);
+        assertThat(remainingTags.get(0).path("postCount").asLong()).isEqualTo(1);
     }
 
     @Test
