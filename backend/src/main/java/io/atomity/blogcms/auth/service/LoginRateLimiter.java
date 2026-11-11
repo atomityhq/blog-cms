@@ -21,7 +21,7 @@ public class LoginRateLimiter {
     static final int MAX_FAILURES = 5;
     static final Duration WINDOW = Duration.ofMinutes(15);
     /** Bounds memory if many distinct clients fail; the oldest entries are dropped. */
-    private static final int MAX_TRACKED_CLIENTS = 10_000;
+    static final int MAX_TRACKED_CLIENTS = 10_000;
 
     private final Map<String, Deque<Instant>> failures = new ConcurrentHashMap<>();
     private final Clock clock;
@@ -50,10 +50,24 @@ public class LoginRateLimiter {
     }
 
     public void recordFailure(String client) {
-        if (failures.size() >= MAX_TRACKED_CLIENTS) {
-            failures.clear();
+        Deque<Instant> attempts = failures.get(client);
+
+        if (attempts == null && failures.size() >= MAX_TRACKED_CLIENTS) {
+            Instant cutoff = clock.instant().minus(WINDOW);
+            failures.entrySet().removeIf(entry -> {
+                Deque<Instant> recorded = entry.getValue();
+                synchronized (recorded) {
+                    prune(recorded);
+                    return recorded.isEmpty();
+                }
+            });
+
+            if (failures.size() >= MAX_TRACKED_CLIENTS) {
+                return;
+            }
         }
-        Deque<Instant> attempts = failures.computeIfAbsent(client, key -> new ArrayDeque<>());
+
+        attempts = failures.computeIfAbsent(client, key -> new ArrayDeque<>());
         synchronized (attempts) {
             prune(attempts);
             attempts.addLast(clock.instant());
