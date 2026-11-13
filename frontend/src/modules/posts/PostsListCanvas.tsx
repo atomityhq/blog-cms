@@ -37,7 +37,7 @@ import { listAuthors } from "@/modules/authors/api";
 import { listTags } from "@/modules/tags/api";
 import type { PostSortKey, PostStatus, PostSummary } from "@/types/post";
 import { archivePost, countPostsByStatus, deletePost, duplicatePost, listPosts, publishPost, unpublishPost } from "./api";
-import { buildPostListParams, reconcilePostListPage } from "./list-page-reconciliation";
+import { buildPostListParams, postListQueryKey, postsListView, reconcilePostListPage } from "./list-page-reconciliation";
 import { uniqueIdealForEntries } from "./idealFor";
 
 type StatusTab = PostStatus | "ALL";
@@ -75,7 +75,6 @@ export function PostsListCanvas() {
     [tab, debouncedQuery, tagId, authorId, sort, page],
   );
   const pageMeta = posts.data?.meta;
-  const listQueryKey = JSON.stringify([tab, debouncedQuery, tagId, authorId, sort.key, sort.direction, PAGE_SIZE]);
   const listParams = buildPostListParams({
     tab,
     query: debouncedQuery,
@@ -86,10 +85,14 @@ export function PostsListCanvas() {
     page,
     pageSize: PAGE_SIZE,
   });
-  const correctedListParams =
-    !posts.loading && !posts.error && pageMeta ? reconcilePostListPage(listParams, pageMeta) : null;
-  const isPageCorrectionPending =
-    !posts.error && (pageCorrectionQueryKey === listQueryKey || correctedListParams !== null);
+  const listQueryKey = postListQueryKey(listParams);
+  const view = postsListView({
+    data: posts.data,
+    error: posts.error,
+    loading: posts.loading,
+    params: listParams,
+    correctionQueryKey: pageCorrectionQueryKey,
+  });
 
   // Only reconcile after the response for this exact page has settled. During an
   // ordinary page/filter request, useAsync keeps the previous rows visible.
@@ -306,9 +309,6 @@ export function PostsListCanvas() {
     setPage(0);
   };
 
-  const rows = isPageCorrectionPending ? [] : posts.data?.items ?? [];
-  const isFirstLoad = posts.loading && !posts.data;
-
   return (
     <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-[var(--page-pad)]">
       <PageHeader
@@ -377,7 +377,7 @@ export function PostsListCanvas() {
             <div className="p-4">
               <ErrorState title="Couldn't load posts" error={posts.error} onRetry={posts.reload} />
             </div>
-          ) : !isFirstLoad && !posts.loading && !isPageCorrectionPending && rows.length === 0 ? (
+          ) : view.showEmptyState ? (
             <div className="p-4">
               {hasFilters || tab !== "ALL" ? (
                 <EmptyState icon={SearchX} title="No posts match" description="Try a different search, status or filter." />
@@ -399,18 +399,18 @@ export function PostsListCanvas() {
             <DataTable
               caption="Posts"
               columns={columns}
-              rows={rows}
+              rows={view.rows}
               rowKey={(post) => post.id}
               onRowClick={(post) => router.push(`/posts/${post.id}`)}
               sort={sort}
               onSortChange={onSortChange}
-              loading={posts.loading || isPageCorrectionPending}
+              loading={view.tableLoading}
             />
             </div>
           )}
         </div>
 
-        {posts.data && posts.data.meta.totalElements > 0 && !isPageCorrectionPending && (
+        {posts.data && view.showPagination && (
           <div className="border-t border-line px-3.5 py-2">
             <Pagination meta={posts.data.meta} onPageChange={changePage} noun="posts" />
           </div>
