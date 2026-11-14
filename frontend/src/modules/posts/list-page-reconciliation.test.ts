@@ -4,6 +4,7 @@ import type { PostListParams } from "@/types/post";
 import {
   buildPostListParams,
   postListQueryKey,
+  postsListPageCorrection,
   postsListView,
   reconcilePostListPage,
   type PostsListViewInput,
@@ -270,6 +271,176 @@ describe("postsListView", () => {
         showEmptyState: true,
         showPagination: false,
       });
+    });
+  });
+});
+
+describe("postsListPageCorrection", () => {
+  type Row = { id: string };
+
+  function rows(count: number, from = 0): Row[] {
+    return Array.from({ length: count }, (_, i) => ({ id: `post-${from + i}` }));
+  }
+
+  function page(items: Row[], pageIndex: number, totalElements: number): Page<Row> {
+    return { items, meta: { page: pageIndex, size: 10, totalElements, totalPages: Math.ceil(totalElements / 10) } };
+  }
+
+  function input(overrides: Partial<PostsListViewInput<Row>> & Pick<PostsListViewInput<Row>, "params">): PostsListViewInput<Row> {
+    return { data: undefined, error: undefined, loading: false, correctionQueryKey: null, ...overrides };
+  }
+
+  const filters: PostListParams = { status: "DRAFT", q: "release", sort: "updatedAt", direction: "desc", size: 10 };
+  const at = (pageIndex: number): PostListParams => ({ ...filters, page: pageIndex });
+  const key = postListQueryKey(at(0));
+
+  describe("starting a correction", () => {
+    it("moves to the last valid page and records the query it was made for", () => {
+      expect(postsListPageCorrection(input({ data: page([], 2, 20), params: at(2) }))).toEqual({
+        page: 1,
+        correctionQueryKey: key,
+      });
+    });
+
+    it("moves to the first page when the query no longer has any results", () => {
+      expect(postsListPageCorrection(input({ data: page([], 2, 0), params: at(2) }))).toEqual({
+        page: 0,
+        correctionQueryKey: key,
+      });
+    });
+
+    it("does nothing while the response for the page is still loading", () => {
+      expect(postsListPageCorrection(input({ data: page([], 2, 20), loading: true, params: at(2) }))).toBeNull();
+    });
+
+    it("does nothing when the request failed", () => {
+      expect(postsListPageCorrection(input({ data: page([], 2, 20), error: new Error("boom"), params: at(2) }))).toBeNull();
+    });
+
+    it("does nothing before any response has arrived", () => {
+      expect(postsListPageCorrection(input({ params: at(2) }))).toBeNull();
+    });
+
+    it("does nothing for a valid page outside a correction", () => {
+      expect(postsListPageCorrection(input({ data: page(rows(10, 10), 1, 20), params: at(1) }))).toBeNull();
+    });
+  });
+
+  describe("ending a correction", () => {
+    it("clears the correction once the corrected page has settled", () => {
+      expect(
+        postsListPageCorrection(input({ data: page(rows(10, 10), 1, 20), params: at(1), correctionQueryKey: key })),
+      ).toEqual({ page: 1, correctionQueryKey: null });
+    });
+
+    it("clears the correction when the corrected first page is empty", () => {
+      expect(postsListPageCorrection(input({ data: page([], 0, 0), params: at(0), correctionQueryKey: key }))).toEqual({
+        page: 0,
+        correctionQueryKey: null,
+      });
+    });
+
+    it("keeps the correction while the corrected page is loading", () => {
+      expect(
+        postsListPageCorrection(input({ data: page([], 2, 20), loading: true, params: at(1), correctionQueryKey: key })),
+      ).toBeNull();
+    });
+
+    it("leaves a correction made for a different query alone", () => {
+      const otherQuery = postListQueryKey({ ...at(0), q: "other" });
+      expect(
+        postsListPageCorrection(input({ data: page(rows(10, 10), 1, 20), params: at(1), correctionQueryKey: otherQuery })),
+      ).toBeNull();
+    });
+  });
+
+  describe("full lifecycle", () => {
+    /**
+     * Drives the posts list the way PostsListCanvas does: after every render the
+     * transition is applied to the page state, and requests settle when told to.
+     */
+    function createList(initialPage: number, initialResponse: Page<Row>) {
+      const state = { page: initialPage, correctionQueryKey: null as string | null };
+      let data: Page<Row> | undefined = initialResponse;
+      let loading = false;
+      let transitions = 0;
+
+      const current = () => input({ data, loading, params: at(state.page), correctionQueryKey: state.correctionQueryKey });
+      const settleEffects = () => {
+        for (let next = postsListPageCorrection(current()); next; next = postsListPageCorrection(current())) {
+          if (++transitions > 10) throw new Error("page correction did not settle");
+          if (next.page !== state.page) loading = true; // a new page means a new request
+          state.page = next.page;
+          state.correctionQueryKey = next.correctionQueryKey;
+        }
+      };
+      settleEffects();
+
+      return {
+        state,
+        view: () => postsListView(current()),
+        reload: () => {
+          loading = true;
+          settleEffects();
+        },
+        respond: (response: Page<Row>) => {
+          data = response;
+          loading = false;
+          settleEffects();
+        },
+      };
+    }
+
+    it("recovers from deleting the only post on the last page", () => {
+      const list = createList(2, page(rows(1, 20), 2, 21));
+      expect(list.view()).toMatchObject({ tableLoading: false, showPagination: true });
+
+      // Delete the post: the list reloads page 3 and keeps showing it meanwhile.
+      list.reload();
+      expect(list.state).toEqual({ page: 2, correctionQueryKey: null });
+      expect(list.view()).toMatchObject({ tableLoading: true, pageCorrectionPending: false });
+
+      // Page 3 no longer exists: the list moves to page 2 without an empty state.
+      list.respond(page([], 2, 20));
+      expect(list.state).toEqual({ page: 1, correctionQueryKey: key });
+      expect(list.view()).toMatchObject({
+        rows: [],
+        tableLoading: true,
+        pageCorrectionPending: true,
+        showEmptyState: false,
+        showPagination: false,
+      });
+
+      // Page 2 arrives: the correction ends and the list is no longer loading.
+      const corrected = page(rows(10, 10), 1, 20);
+      list.respond(corrected);
+      expect(list.state).toEqual({ page: 1, correctionQueryKey: null });
+      expect(list.view()).toEqual({
+        rows: corrected.items,
+        pageCorrectionPending: false,
+        tableLoading: false,
+        showEmptyState: false,
+        showPagination: true,
+      });
+    });
+
+    it("recovers to the empty state when the last post of a query is deleted", () => {
+      const list = createList(1, page(rows(1, 10), 1, 11));
+      list.reload();
+      list.respond(page([], 1, 0));
+      expect(list.state).toEqual({ page: 0, correctionQueryKey: key });
+      expect(list.view()).toMatchObject({ tableLoading: true, showEmptyState: false });
+
+      list.respond(page([], 0, 0));
+      expect(list.state).toEqual({ page: 0, correctionQueryKey: null });
+      expect(list.view()).toMatchObject({ tableLoading: false, showEmptyState: true, pageCorrectionPending: false });
+    });
+
+    it("would stay loading forever if the correction were never cleared", () => {
+      const corrected = page(rows(10, 10), 1, 20);
+      const stuck = input({ data: corrected, params: at(1), correctionQueryKey: key });
+      expect(postsListView(stuck)).toMatchObject({ tableLoading: true, rows: [] });
+      expect(postsListPageCorrection(stuck)).toEqual({ page: 1, correctionQueryKey: null });
     });
   });
 });
