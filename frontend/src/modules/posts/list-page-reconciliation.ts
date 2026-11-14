@@ -92,3 +92,34 @@ export function postsListView<T>({ data, error, loading, params, correctionQuery
     showPagination: Boolean(data && data.meta.totalElements > 0) && !pageCorrectionPending,
   };
 }
+
+export interface PostsListPageState {
+  page: number;
+  correctionQueryKey: string | null;
+}
+
+/**
+ * The page-correction transition the posts list applies after each settled
+ * response. Returns the next page state when it should change, or null to keep it.
+ *
+ * - A settled response proving the requested page no longer exists starts a
+ *   correction: move to the last valid page and remember which query it was for.
+ * - The settled response for that corrected page ends the correction; without
+ *   this the list would stay in its loading state.
+ * - While loading, after an error or before any data, nothing changes.
+ */
+export function postsListPageCorrection<T>({
+  data,
+  error,
+  loading,
+  params,
+  correctionQueryKey,
+}: PostsListViewInput<T>): PostsListPageState | null {
+  if (loading || error || !data) return null;
+
+  const queryKey = postListQueryKey(params);
+  const corrected = reconcilePostListPage(params, data.meta);
+  if (corrected) return { page: corrected.page ?? 0, correctionQueryKey: queryKey };
+  if (correctionQueryKey === queryKey) return { page: params.page ?? 0, correctionQueryKey: null };
+  return null;
+}

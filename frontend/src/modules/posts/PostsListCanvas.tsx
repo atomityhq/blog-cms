@@ -37,7 +37,7 @@ import { listAuthors } from "@/modules/authors/api";
 import { listTags } from "@/modules/tags/api";
 import type { PostSortKey, PostStatus, PostSummary } from "@/types/post";
 import { archivePost, countPostsByStatus, deletePost, duplicatePost, listPosts, publishPost, unpublishPost } from "./api";
-import { buildPostListParams, postListQueryKey, postsListView, reconcilePostListPage } from "./list-page-reconciliation";
+import { buildPostListParams, postsListPageCorrection, postsListView } from "./list-page-reconciliation";
 import { uniqueIdealForEntries } from "./idealFor";
 
 type StatusTab = PostStatus | "ALL";
@@ -74,7 +74,6 @@ export function PostsListCanvas() {
       ),
     [tab, debouncedQuery, tagId, authorId, sort, page],
   );
-  const pageMeta = posts.data?.meta;
   const listParams = buildPostListParams({
     tab,
     query: debouncedQuery,
@@ -85,57 +84,26 @@ export function PostsListCanvas() {
     page,
     pageSize: PAGE_SIZE,
   });
-  const listQueryKey = postListQueryKey(listParams);
-  const view = postsListView({
+  const listInput = {
     data: posts.data,
     error: posts.error,
     loading: posts.loading,
     params: listParams,
     correctionQueryKey: pageCorrectionQueryKey,
-  });
+  };
+  const view = postsListView(listInput);
+  // Starts a correction when a settled page no longer exists, and ends it once the
+  // corrected page's response arrives (see postsListPageCorrection). Applying a
+  // transition always changes page or correction key, so the next render yields null.
+  const pageCorrection = postsListPageCorrection(listInput);
 
-  // Only reconcile after the response for this exact page has settled. During an
-  // ordinary page/filter request, useAsync keeps the previous rows visible.
   useEffect(() => {
-    if (posts.loading) return;
-    if (posts.error) return;
-    if (!pageMeta) return;
-
-    const corrected = reconcilePostListPage(
-      buildPostListParams({
-        tab,
-        query: debouncedQuery,
-        tagId,
-        authorId,
-        sort: sort.key as PostSortKey,
-        direction: sort.direction,
-        page,
-        pageSize: PAGE_SIZE,
-      }),
-      pageMeta,
-    );
-    if (corrected) {
-      // The settled response is async external data; mark this correction before changing page.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPageCorrectionQueryKey(listQueryKey);
-      setPage(corrected.page ?? 0);
-    } else if (pageCorrectionQueryKey === listQueryKey) {
-      setPageCorrectionQueryKey(null);
-    }
-  }, [
-    posts.loading,
-    posts.error,
-    pageMeta,
-    tab,
-    debouncedQuery,
-    tagId,
-    authorId,
-    sort.key,
-    sort.direction,
-    page,
-    listQueryKey,
-    pageCorrectionQueryKey,
-  ]);
+    if (!pageCorrection) return;
+    // The settled response is async external data; mark the correction before changing page.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPageCorrectionQueryKey(pageCorrection.correctionQueryKey);
+    setPage(pageCorrection.page);
+  }, [pageCorrection]);
 
   const counts = useAsync(countPostsByStatus, []);
   const authors = useAsync(listAuthors, []);
