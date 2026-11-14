@@ -91,6 +91,10 @@ public final class ContentAnalyzer {
     }
 
     private static void walk(JsonNode node, StringBuilder text, Set<UUID> imageIds) {
+        JsonNode children = node.path("content");
+        if (!children.isMissingNode() && !children.isArray()) {
+            throw ApiException.badRequest("INVALID_CONTENT", "A node's content must be an array");
+        }
         String type = node.path("type").asText();
         switch (type) {
             case "text" -> {
@@ -107,7 +111,7 @@ public final class ContentAnalyzer {
                 // Other node types carry no text of their own.
             }
         }
-        for (JsonNode child : node.path("content")) {
+        for (JsonNode child : children) {
             walk(child, text, imageIds);
         }
         if (BLOCK_TYPES.contains(type)) {
