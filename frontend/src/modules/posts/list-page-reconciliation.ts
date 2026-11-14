@@ -1,4 +1,4 @@
-import type { PageMeta } from "@/types/api";
+import type { Page, PageMeta } from "@/types/api";
 import type { PostListParams, PostSortKey, PostStatus } from "@/types/post";
 
 export interface PostsListQueryInput {
@@ -49,4 +49,77 @@ export function reconcilePostListPage(params: PostListParams, meta: PageMeta): P
 
   if (correctedPage === null || correctedPage === requestedPage) return null;
   return { ...params, page: correctedPage };
+}
+
+/**
+ * Identifies the active list query regardless of its page.
+ * Page correction can be tied to the tab, filters and sort it was made for.
+ */
+export function postListQueryKey(params: PostListParams): string {
+  return JSON.stringify({ ...params, page: undefined });
+}
+
+export interface PostsListViewInput<T> {
+  data: Page<T> | undefined;
+  error: Error | undefined;
+  loading: boolean;
+  params: PostListParams;
+  correctionQueryKey: string | null; // Query key of a page correction
+}
+
+export interface PostsListView<T> {
+  rows: T[];
+  pageCorrectionPending: boolean; // The requested page no longer exists and the list is moving to a valid one
+  tableLoading: boolean;
+  showEmptyState: boolean;
+  showPagination: boolean;
+}
+
+/**
+ * What the posts list shows for the current request state. During an ordinary
+ * request the previous rows and pagination stay visible; while an out-of-range page
+ * is being corrected, neither an empty state nor an invalid range is shown.
+ */
+export function postsListView<T>({ data, error, loading, params, correctionQueryKey }: PostsListViewInput<T>): PostsListView<T> {
+  const corrected = !loading && !error && data ? reconcilePostListPage(params, data.meta) : null;
+  const pageCorrectionPending = !error && (correctionQueryKey === postListQueryKey(params) || corrected !== null);
+  const rows = pageCorrectionPending ? [] : data?.items ?? [];
+  return {
+    rows,
+    pageCorrectionPending,
+    tableLoading: loading || pageCorrectionPending,
+    showEmptyState: !error && !loading && !pageCorrectionPending && rows.length === 0,
+    showPagination: Boolean(data && data.meta.totalElements > 0) && !pageCorrectionPending,
+  };
+}
+
+export interface PostsListPageState {
+  page: number;
+  correctionQueryKey: string | null;
+}
+
+/**
+ * The page-correction transition the posts list applies after each settled
+ * response. Returns the next page state when it should change, or null to keep it.
+ *
+ * - A settled response proving the requested page no longer exists starts a
+ *   correction: move to the last valid page and remember which query it was for.
+ * - The settled response for that corrected page ends the correction; without
+ *   this the list would stay in its loading state.
+ * - While loading, after an error or before any data, nothing changes.
+ */
+export function postsListPageCorrection<T>({
+  data,
+  error,
+  loading,
+  params,
+  correctionQueryKey,
+}: PostsListViewInput<T>): PostsListPageState | null {
+  if (loading || error || !data) return null;
+
+  const queryKey = postListQueryKey(params);
+  const corrected = reconcilePostListPage(params, data.meta);
+  if (corrected) return { page: corrected.page ?? 0, correctionQueryKey: queryKey };
+  if (correctionQueryKey === queryKey) return { page: params.page ?? 0, correctionQueryKey: null };
+  return null;
 }
