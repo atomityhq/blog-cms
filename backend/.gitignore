@@ -12,3 +12,6 @@ out/
 # Logs
 *.log
 data/
+
+# Locally uploaded media files
+/uploads/
