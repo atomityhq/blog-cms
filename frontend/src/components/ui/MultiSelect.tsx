@@ -22,25 +22,33 @@ export interface MultiSelectProps {
 }
 
 /**
- * Chips + type-ahead combobox for picking several items (authors, tags).
- * Keyboard: ↑/↓ to move, Enter to toggle, Backspace on an empty box removes the last chip.
+- Chips + type-ahead combobox for picking several items (authors, tags).
+- Keyboard: ↑/↓ to move, Enter to toggle, Backspace on an empty box removes the last chip.
  */
 export function MultiSelect({ id, options, value, onChange, placeholder = "Search…", onCreate, renderChipPrefix }: MultiSelectProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [createdOptions, setCreatedOptions] = useState<MultiSelectOption[]>([]);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
 
-  const selected = value.flatMap((v) => options.filter((o) => o.id === v));
+  const mergedOptions = useMemo(() => {
+    const byId = new Map<string, MultiSelectOption>();
+    for (const option of createdOptions) byId.set(option.id, option);
+    for (const option of options) byId.set(option.id, option);
+    return Array.from(byId.values());
+  }, [options, createdOptions]);
+
+  const selected = value.flatMap((v) => mergedOptions.filter((o) => o.id === v));
   const trimmed = query.trim();
   const matches = useMemo(
-    () => options.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase())),
-    [options, trimmed],
+    () => mergedOptions.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase())),
+    [mergedOptions, trimmed],
   );
-  const canCreate = Boolean(onCreate && trimmed && !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase()));
+  const canCreate = Boolean(onCreate && trimmed && !mergedOptions.some((o) => o.label.toLowerCase() === trimmed.toLowerCase()));
   const rowCount = matches.length + (canCreate ? 1 : 0);
 
   useEffect(() => {
@@ -64,8 +72,10 @@ export function MultiSelect({ id, options, value, onChange, placeholder = "Searc
     setCreating(true);
     try {
       const option = await onCreate(trimmed);
+      setCreatedOptions((prev) => (prev.some((o) => o.id === option.id) ? prev : [...prev, option]));
       onChange([...value, option.id]);
       setQuery("");
+      setHighlight(0);
     } finally {
       setCreating(false);
     }
